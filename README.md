@@ -2,7 +2,6 @@
 
 > Production-oriented event-driven payment processing and fraud-screening platform built with .NET 10, PostgreSQL, Kafka-compatible Redpanda, Docker, Kubernetes, OpenTelemetry, Prometheus, Grafana and React.
 
-[![CI](https://github.com/shrutii09/SettleFlow/actions/workflows/ci.yml/badge.svg)](https://github.com/shrutii09/SettleFlow/actions/workflows/ci.yml)
 
 ---
 
