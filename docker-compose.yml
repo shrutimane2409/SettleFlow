@@ -1,0 +1,105 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: settleflow
+      POSTGRES_USER: settleflow
+      POSTGRES_PASSWORD: settleflow
+    ports: ["5432:5432"]
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U settleflow -d settleflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redpanda:
+    image: redpandadata/redpanda:v25.2.1
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp
+      - '1'
+      - --memory
+      - 1G
+      - --reserve-memory
+      - 0M
+      - --node-id
+      - '0'
+      - --check=false
+      - --kafka-addr
+      - PLAINTEXT://0.0.0.0:9092,OUTSIDE://0.0.0.0:19092
+      - --advertise-kafka-addr
+      - PLAINTEXT://redpanda:9092,OUTSIDE://localhost:19092
+    ports: ["19092:19092"]
+    volumes: ["redpanda_data:/var/lib/redpanda/data"]
+
+  console:
+    image: redpandadata/console:v3.2.2
+    depends_on: [redpanda]
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+    ports: ["8081:8080"]
+
+  api:
+    build:
+      context: .
+      dockerfile: src/SettleFlow.Api/Dockerfile
+    depends_on:
+      postgres: { condition: service_healthy }
+      redpanda: { condition: service_started }
+    ports: ["8080:8080"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=settleflow;Username=settleflow;Password=settleflow
+      Kafka__BootstrapServers: redpanda:9092
+      Kafka__GroupId: settleflow-api
+
+  fraud-worker:
+    build: { context: ., dockerfile: src/SettleFlow.FraudWorker/Dockerfile }
+    depends_on: [postgres, redpanda]
+    environment:
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=settleflow;Username=settleflow;Password=settleflow
+      Kafka__BootstrapServers: redpanda:9092
+      Kafka__GroupId: settleflow-fraud-v1
+
+  settlement-worker:
+    build: { context: ., dockerfile: src/SettleFlow.SettlementWorker/Dockerfile }
+    depends_on: [postgres, redpanda]
+    environment:
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=settleflow;Username=settleflow;Password=settleflow
+      Kafka__BootstrapServers: redpanda:9092
+      Kafka__GroupId: settleflow-settlement-v1
+
+  notification-worker:
+    build: { context: ., dockerfile: src/SettleFlow.NotificationWorker/Dockerfile }
+    depends_on: [postgres, redpanda]
+    environment:
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=settleflow;Username=settleflow;Password=settleflow
+      Kafka__BootstrapServers: redpanda:9092
+      Kafka__GroupId: settleflow-notification-v1
+
+  frontend:
+    build: ./frontend
+    depends_on: [api]
+    ports: ["3000:80"]
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    volumes: ["./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["9090:9090"]
+    depends_on: [api]
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    ports: ["3001:3000"]
+    volumes:
+      - "./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro"
+      - grafana_data:/var/lib/grafana
+    depends_on: [prometheus]
+
+volumes:
+  postgres_data:
+  redpanda_data:
+  grafana_data:

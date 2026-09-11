@@ -1,0 +1,5 @@
+namespace: settleflow
+image:
+  repository: ghcr.io/YOUR_GITHUB_USER/settleflow-api
+  tag: latest
+replicaCount: 1

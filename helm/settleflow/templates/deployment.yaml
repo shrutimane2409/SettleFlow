@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-api
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector: { matchLabels: { app: settleflow-api } }
+  template:
+    metadata: { labels: { app: settleflow-api } }
+    spec:
+      containers:
+        - name: api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports: [{ containerPort: 8080 }]
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:8080
+            - name: ConnectionStrings__Postgres
+              valueFrom: { secretKeyRef: { name: settleflow-secrets, key: postgres } }
+            - name: Kafka__BootstrapServers
+              value: redpanda:9092
+          readinessProbe: { httpGet: { path: /health, port: 8080 }, initialDelaySeconds: 10 }
+          livenessProbe: { httpGet: { path: /health, port: 8080 }, initialDelaySeconds: 30 }
