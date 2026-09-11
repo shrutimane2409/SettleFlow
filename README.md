@@ -66,23 +66,25 @@ The project focuses on backend engineering concerns such as:
        OpenTelemetry → Prometheus → Grafana
 ```
 
-## Payment Created
+## Payment Lifecycle
 
 ```text
-
+Payment Created
       │
       ▼
 Fraud Screening
       │
  ┌────┴───────────────┐
  ▼                    ▼
-APPROVED             REVIEW / DECLINED
+APPROVED          REVIEW / DECLINED
  │                    │
  ▼                    ▼
-Settlement          Payment Failed
+Settlement        Payment Failed
  │
  ▼
 Settlement Completed
  │
+ ▼
+Notification
  ▼
 Notification
