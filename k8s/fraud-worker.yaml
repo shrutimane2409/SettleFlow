@@ -18,7 +18,7 @@ spec:
       securityContext: { runAsNonRoot: true }
       containers:
         - name: fraud-worker
-          image: ghcr.io/shrutii09/settleflow-fraud-workeratest
+          image: ghcr.io/shrutimane2409/settleflow-fraud-workeratest
           ports: [{ name: http, containerPort: 8080 }]
           env:
             - name: ConnectionStrings__Postgres

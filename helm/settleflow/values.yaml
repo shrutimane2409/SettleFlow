@@ -1,5 +1,5 @@
 image:
-  registry: ghcr.io/shrutii09
+  registry: ghcr.io/shrutimane2409
   tag: latest
   pullPolicy: IfNotPresent
 
