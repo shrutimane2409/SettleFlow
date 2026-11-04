@@ -91,3 +91,35 @@ export interface Stats {
   throughput: { minute: string; count: number }[];
   pipeline: { outboxPending: number; outboxLagSeconds: number; deadLetters: number };
 }
+
+export interface Merchant {
+  id: string;
+  name: string;
+  apiKeyPrefix: string;
+  disabled: boolean;
+  createdAt: string;
+  keyRotatedAt: string | null;
+}
+
+export interface User {
+  id: string;
+  username: string;
+  role: 'admin' | 'analyst' | 'viewer';
+  disabled: boolean;
+  locked: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
+}
+
+export interface AuditEntry {
+  id: number;
+  actor: string;
+  actorType: 'user' | 'merchant' | 'system';
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  details: string | null;
+  ipAddress: string | null;
+  traceId: string | null;
+  occurredAt: string;
+}

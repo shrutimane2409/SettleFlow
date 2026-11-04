@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { api } from '../api/client';
+import { can, useSession } from '../auth';
 import { formatMoney, usePolling } from '../hooks';
 import { RiskMeter, StatusBadge } from './ui';
 
@@ -12,7 +13,7 @@ const EVENT_ICON: Record<string, string> = {
 export function PaymentDrawer({ id, onClose, onChanged }: { id: string; onClose: () => void; onChanged: () => void }) {
   const { data: payment, refresh: refreshPayment } = usePolling(() => api.payment(id), 1500, [id]);
   const { data: timeline, refresh: refreshTimeline } = usePolling(() => api.timeline(id), 1500, [id]);
-  const [reviewer, setReviewer] = useState(() => localStorage.getItem('reviewer') ?? 'ops_analyst');
+  const me = useSession();
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -21,8 +22,7 @@ export function PaymentDrawer({ id, onClose, onChanged }: { id: string; onClose:
     setBusy(true);
     setError(null);
     try {
-      localStorage.setItem('reviewer', reviewer);
-      await api.review(id, decision, reviewer, note || undefined);
+      await api.review(id, decision, note || undefined);
       setNote('');
       await Promise.all([refreshPayment(), refreshTimeline()]);
       onChanged();
@@ -62,14 +62,14 @@ export function PaymentDrawer({ id, onClose, onChanged }: { id: string; onClose:
               {payment.reviewedBy && (<><dt>Reviewed by</dt><dd>{payment.reviewedBy}{payment.reviewNote ? ` — “${payment.reviewNote}”` : ''}</dd></>)}
             </dl>
 
-            {payment.status === 'FraudReview' && (
+            {payment.status === 'FraudReview' && can.review(me) && (
               <div className="review-box">
                 <h3>Manual review</h3>
-                <label>Reviewer<input value={reviewer} onChange={e => setReviewer(e.target.value)} /></label>
+                <p className="muted small">Reviewing as <b>{me?.user.username}</b>. Your decision is recorded in the audit log.</p>
                 <label>Note<input value={note} placeholder="optional" onChange={e => setNote(e.target.value)} /></label>
                 <div className="form-actions">
-                  <button className="approve" disabled={busy || !reviewer} onClick={() => review('APPROVE')}><Check size={15} /> Approve</button>
-                  <button className="reject" disabled={busy || !reviewer} onClick={() => review('REJECT')}><X size={15} /> Reject</button>
+                  <button className="approve" disabled={busy} onClick={() => review('APPROVE')}><Check size={15} /> Approve</button>
+                  <button className="reject" disabled={busy} onClick={() => review('REJECT')}><X size={15} /> Reject</button>
                 </div>
                 {error && <p className="form-msg error">{error}</p>}
               </div>

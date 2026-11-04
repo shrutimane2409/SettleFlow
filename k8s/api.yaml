@@ -27,6 +27,12 @@ spec:
               value: redpanda:9092
             - name: Kafka__GroupId
               value: settleflow-api
+            - name: Auth__JwtSigningKey
+              valueFrom: { secretKeyRef: { name: settleflow-secrets, key: jwt-signing-key } }
+            - name: Bootstrap__AdminPassword
+              valueFrom: { secretKeyRef: { name: settleflow-secrets, key: admin-password } }
+            - name: ASPNETCORE_FORWARDEDHEADERS_ENABLED
+              value: "true"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: http://jaeger-collector:4317
           resources:

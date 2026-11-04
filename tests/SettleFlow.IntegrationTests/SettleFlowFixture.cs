@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -26,7 +27,13 @@ public sealed class SettleFlowFixture : IAsyncLifetime
     private WebApplicationFactory<Program>? _api;
     private IHost? _workers;
 
+    public const string AdminPassword = "integration-admin-pw";
+    public const string DemoPassword = "integration-demo-pw";
+
+    /// <summary>Signed in as the seeded admin.</summary>
     public HttpClient Client { get; private set; } = null!;
+
+    public string PostgresConnectionString => _postgres.GetConnectionString();
 
     private Dictionary<string, string?> Settings() => new()
     {
@@ -37,7 +44,12 @@ public sealed class SettleFlowFixture : IAsyncLifetime
         ["Settlement:TransientFailureRate"] = "0",
         ["Settlement:MaxLatencyMs"] = "0",
         ["Outbox:PollInterval"] = "00:00:00.050",
-        ["RateLimiting:PaymentsPerWindow"] = "10000"
+        ["RateLimiting:PaymentsPerWindow"] = "10000",
+        ["RateLimiting:LoginsPerMinute"] = "10000",
+        ["Auth:JwtSigningKey"] = "integration-tests-signing-key-0123456789abcdef",
+        ["Bootstrap:AdminPassword"] = AdminPassword,
+        ["Bootstrap:DemoData"] = "true",
+        ["Bootstrap:DemoPassword"] = DemoPassword
     };
 
     public async Task InitializeAsync()
@@ -50,7 +62,7 @@ public sealed class SettleFlowFixture : IAsyncLifetime
             b.UseEnvironment("Testing");
             foreach (var (k, v) in settings) b.UseSetting(k, v);
         });
-        Client = _api.CreateClient();
+        Client = await ClientForUserAsync("admin", AdminPassword);
 
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { EnvironmentName = "Testing" });
         builder.Configuration.AddInMemoryCollection(settings);
@@ -70,14 +82,46 @@ public sealed class SettleFlowFixture : IAsyncLifetime
         await Task.WhenAll(_postgres.DisposeAsync().AsTask(), _redpanda.DisposeAsync().AsTask());
     }
 
-    public async Task<HttpResponseMessage> PostPaymentAsync(object body, string? key = null)
+    public HttpClient AnonymousClient() => _api!.CreateClient();
+
+    public async Task<HttpResponseMessage> LoginAsync(string username, string password) =>
+        await AnonymousClient().PostAsJsonAsync("/api/auth/login", new { username, password });
+
+    public async Task<HttpClient> ClientForUserAsync(string username, string password)
+    {
+        var response = await LoginAsync(username, password);
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadFromJsonAsync<LoginResponse>(Json);
+        var client = _api!.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", body!.Token);
+        return client;
+    }
+
+    public HttpClient ClientForApiKey(string apiKey)
+    {
+        var client = _api!.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
+        return client;
+    }
+
+    /// <summary>Creates a merchant (as admin) and returns its one-time API key.</summary>
+    public async Task<string> CreateMerchantAsync(string id)
+    {
+        var response = await Client.PostAsJsonAsync("/api/merchants", new { id, name = $"Test {id}" });
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<MerchantCreated>(Json))!.ApiKey;
+    }
+
+    public Task<HttpResponseMessage> PostPaymentAsync(object body, string? key = null) => PostPaymentAsync(Client, body, key);
+
+    public static async Task<HttpResponseMessage> PostPaymentAsync(HttpClient client, object body, string? key = null)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/payments") { Content = JsonContent.Create(body) };
         if (key is not null) request.Headers.Add("Idempotency-Key", key);
-        return await Client.SendAsync(request);
+        return await client.SendAsync(request);
     }
 
-    public static object NewPayment(decimal amount = 123.45m, string country = "IE", string merchant = "merchant_it", string currency = "EUR") => new
+    public static object NewPayment(decimal amount = 123.45m, string country = "IE", string merchant = "merchant_demo", string currency = "EUR") => new
     {
         amount,
         currency,
@@ -117,6 +161,10 @@ public sealed class SettleFlowFixture : IAsyncLifetime
 public sealed record PaymentView(
     Guid Id, decimal Amount, string Currency, string Status, int? RiskScore, string[] RiskReasons,
     string? SettlementReference, string? FailureReason, string? ReviewedBy);
+
+public sealed record LoginResponse(string Token, DateTimeOffset ExpiresAt);
+
+public sealed record MerchantCreated(string Id, string ApiKey, string ApiKeyPrefix);
 
 public sealed record TimelineEntry(string Type, string Source, string? Detail, DateTimeOffset OccurredAt);
 

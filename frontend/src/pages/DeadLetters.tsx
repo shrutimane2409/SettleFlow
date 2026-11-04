@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 import { api } from '../api/client';
+import { can, useSession } from '../auth';
 import { Card, Empty } from '../components/ui';
 import { timeAgo, usePolling } from '../hooks';
 
 export function DeadLetters({ onSelect }: { onSelect: (id: string) => void }) {
+  const me = useSession();
   const [showReplayed, setShowReplayed] = useState(false);
   const { data, refresh } = usePolling(() => api.deadLetters(showReplayed), 3000, [showReplayed]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -42,7 +44,9 @@ export function DeadLetters({ onSelect }: { onSelect: (id: string) => void }) {
               </div>
               {d.replayedAt
                 ? <span className="muted-text">replayed {timeAgo(d.replayedAt)}</span>
-                : <button disabled={busy === d.id} onClick={() => replay(d.id)}><RotateCcw size={14} /> Replay</button>}
+                : can.admin(me)
+                  ? <button disabled={busy === d.id} onClick={() => replay(d.id)}><RotateCcw size={14} /> Replay</button>
+                  : <span className="muted-text small">admin can replay</span>}
             </div>
           ))}
         </div>

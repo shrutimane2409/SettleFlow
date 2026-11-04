@@ -49,6 +49,27 @@ PendingFraud ─► FraudApproved ─► Settled
 | Two people review the same payment | Optimistic concurrency (Postgres `xmin`): the second reviewer gets `409`. |
 | Request floods | Per-IP fixed-window rate limit on `POST /api/payments`. |
 
+## Security
+
+| Who | How they authenticate | What they can do |
+|---|---|---|
+| `admin` | `POST /api/auth/login` → bearer token | Everything, including merchants, users, the audit log and DLQ replay |
+| `analyst` | bearer token | Read everything, create payments, approve or reject reviews |
+| `viewer` | bearer token | Read only |
+| merchant | `X-Api-Key` header | Create payments for **its own** merchant id and read **only its own** payments |
+
+- Every endpoint is deny-by-default; only `/health/*`, `/metrics` and login are public.
+- Passwords are hashed (ASP.NET Core Identity PBKDF2), and an account locks for 5 minutes after 5 failed logins. Logins are rate-limited per IP.
+- API keys are random 256-bit secrets. Only their SHA-256 hash is stored, and a key is shown once, at creation or rotation. Rotating or disabling a key takes effect immediately.
+- Reviewers are taken from the signed-in user, never from the request body.
+- **Audit log**: every login (including failures), payment creation, review, DLQ replay, and merchant or user change is recorded with actor, IP and trace id. A Postgres trigger rejects `UPDATE`, `DELETE` and `TRUNCATE` on the table.
+- Idempotency keys are scoped per merchant.
+- Secrets (DB password, JWT signing key, admin password) come from environment variables or Kubernetes secrets, never from code. See `.env.example`.
+- Security headers on the API and the dashboard (CSP, `X-Frame-Options`, `nosniff`, `Referrer-Policy`), plus HSTS outside development.
+- CI runs **CodeQL** (C# and TypeScript), **Trivy** image scanning (fails on fixable HIGH/CRITICAL), and **Dependabot** updates.
+
+**Local demo accounts** (seeded when `DEMO_DATA=true`): `admin` / `admin-change-me`, and `analyst` or `viewer` / `settleflow-demo`. The demo merchant API key is `sf_live_demo0000_local-demo-key-not-a-secret`. Change all of these via `.env` (`cp .env.example .env`) before running anywhere public.
+
 ## Features
 
 - **Fraud engine** with configurable rules (`Fraud` config section): high amount, country risk, round amounts, and **velocity** (many payments from one customer in a short window).
@@ -93,18 +114,25 @@ The dashboard's **Create payment** card has presets for each of these:
 ### API examples
 
 ```bash
+# As a merchant (API key): merchantId comes from the key
 curl -X POST http://localhost:8083/api/payments \
+  -H 'X-Api-Key: sf_live_demo0000_local-demo-key-not-a-secret' \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: demo-001' \
-  -d '{"amount":1250.50,"currency":"EUR","customerId":"cust_1001","merchantId":"merchant_demo","country":"IE"}'
+  -d '{"amount":1250.50,"currency":"EUR","customerId":"cust_1001","country":"IE"}'
 
-curl 'http://localhost:8083/api/payments?status=FraudReview&page=1&pageSize=20'
-curl  http://localhost:8083/api/payments/{id}/timeline
-curl -X POST http://localhost:8083/api/payments/{id}/review \
-  -H 'Content-Type: application/json' -d '{"decision":"APPROVE","reviewer":"alice","note":"known customer"}'
-curl  http://localhost:8083/api/stats
-curl  http://localhost:8083/api/dead-letters
-curl -X POST http://localhost:8083/api/dead-letters/{id}/replay
+# As staff: log in, then send the token
+TOKEN=$(curl -s -X POST http://localhost:8083/api/auth/login -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"admin-change-me"}' | jq -r .token)
+AUTH="Authorization: Bearer $TOKEN"
+
+curl -H "$AUTH" 'http://localhost:8083/api/payments?status=FraudReview&page=1&pageSize=20'
+curl -H "$AUTH" http://localhost:8083/api/payments/{id}/timeline
+curl -H "$AUTH" -X POST http://localhost:8083/api/payments/{id}/review \
+  -H 'Content-Type: application/json' -d '{"decision":"APPROVE","note":"known customer"}'
+curl -H "$AUTH" http://localhost:8083/api/stats
+curl -H "$AUTH" -X POST http://localhost:8083/api/merchants -H 'Content-Type: application/json' -d '{"id":"acme","name":"Acme"}'
+curl -H "$AUTH" http://localhost:8083/api/audit
 ```
 
 ## Local development without Docker for .NET
@@ -160,4 +188,4 @@ k8s/, helm/                     Kubernetes manifests and Helm chart
 
 ## Not included (yet)
 
-Authentication and authorization, a real acquirer integration, schema-registry contracts (Avro/Protobuf), and outbound merchant webhooks. The structure is designed so each can be added without changing the payment API contract.
+A real acquirer integration, schema-registry contracts (Avro/Protobuf), and outbound merchant webhooks. The structure is designed so each can be added without changing the payment API contract.

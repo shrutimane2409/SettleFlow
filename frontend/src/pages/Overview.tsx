@@ -1,4 +1,5 @@
 import { api } from '../api/client';
+import { can, useSession } from '../auth';
 import { PaymentForm } from '../components/PaymentForm';
 import { PaymentsTable } from '../components/PaymentsTable';
 import { Card, Empty, Stat, ThroughputChart } from '../components/ui';
@@ -7,6 +8,7 @@ import { formatMoney, timeAgo, usePolling } from '../hooks';
 const NOTE_TONE: Record<string, string> = { SETTLED: 'good', FAILED: 'bad', REVIEW_REQUIRED: 'warn' };
 
 export function Overview({ onSelect, tick, onCreated }: { onSelect: (id: string) => void; tick: number; onCreated: () => void }) {
+  const me = useSession();
   const { data: stats } = usePolling(api.stats, 2000, [tick]);
   const { data: recent } = usePolling(() => api.payments({ pageSize: 10 }), 2000, [tick]);
   const { data: notes } = usePolling(() => api.notifications(8), 2500, [tick]);
@@ -32,7 +34,9 @@ export function Overview({ onSelect, tick, onCreated }: { onSelect: (id: string)
 
       <section className="grid">
         <Card title="Create payment" aside="API → Outbox → Kafka">
-          <PaymentForm onCreated={onCreated} />
+          {can.createPayments(me)
+            ? <PaymentForm onCreated={onCreated} />
+            : <Empty>Your role ({me?.user.role}) is read-only.</Empty>}
         </Card>
 
         <div className="stack">

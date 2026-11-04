@@ -3,7 +3,7 @@ image:
   tag: latest
   pullPolicy: IfNotPresent
 
-# Secret holding the Postgres connection string under key "postgres".
+# Secret with keys: postgres (connection string), jwt-signing-key, admin-password.
 postgresSecret: settleflow-secrets
 
 kafka:

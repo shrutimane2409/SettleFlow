@@ -18,9 +18,6 @@ namespace SettleFlow.Infrastructure;
 
 public static class ServiceDefaults
 {
-    public const string DefaultConnectionString =
-        "Host=postgres;Port=5432;Database=settleflow;Username=settleflow;Password=settleflow";
-
     /// <summary>
     /// Wiring shared by the API and every worker: logging, Postgres, Kafka, outbox publisher,
     /// OpenTelemetry (traces + Prometheus metrics) and health checks.
@@ -35,7 +32,9 @@ public static class ServiceDefaults
             .Enrich.WithProperty("Service", serviceName)
             .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] [{Service}] {Message:lj} {TraceId}{NewLine}{Exception}"));
 
-        var connectionString = config.GetConnectionString("Postgres") ?? DefaultConnectionString;
+        // No built-in default: credentials must come from configuration (env var / secret), never from code.
+        var connectionString = config.GetConnectionString("Postgres")
+            ?? throw new InvalidOperationException("ConnectionStrings:Postgres is not configured (env var ConnectionStrings__Postgres).");
         builder.Services.AddDbContext<SettleFlowDbContext>(o => o.UseNpgsql(connectionString));
 
         builder.Services.Configure<KafkaOptions>(config.GetSection("Kafka"));
@@ -71,10 +70,11 @@ public static class ServiceDefaults
     /// <summary>Maps <c>/health/live</c>, <c>/health/ready</c>, <c>/health</c> and <c>/metrics</c>.</summary>
     public static WebApplication MapSettleFlowDefaults(this WebApplication app)
     {
-        app.MapPrometheusScrapingEndpoint();
-        app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
-        app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready"), ResponseWriter = WriteHealthJson });
-        app.MapHealthChecks("/health", new HealthCheckOptions { ResponseWriter = WriteHealthJson });
+        // Probes and scrapers are unauthenticated (keep these endpoints on the internal network).
+        app.MapPrometheusScrapingEndpoint().AllowAnonymous();
+        app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false }).AllowAnonymous();
+        app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready"), ResponseWriter = WriteHealthJson }).AllowAnonymous();
+        app.MapHealthChecks("/health", new HealthCheckOptions { ResponseWriter = WriteHealthJson }).AllowAnonymous();
         return app;
     }
 

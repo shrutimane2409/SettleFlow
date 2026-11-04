@@ -10,6 +10,7 @@
     <ProjectReference Include="../SettleFlow.Contracts/SettleFlow.Contracts.csproj" />
     <ProjectReference Include="../SettleFlow.Infrastructure/SettleFlow.Infrastructure.csproj" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
   </ItemGroup>
 
 </Project>

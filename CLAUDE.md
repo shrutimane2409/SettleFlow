@@ -39,6 +39,14 @@ payments.fraud.completed → SettlementWorker (APPROVED and status FraudApproved
 settlement.completed / payments.failed → notification workers → notifications.requested → NotificationSinkWorker stores a Notification row
 ```
 
+### Security (`src/SettleFlow.Api/Security/`)
+- Deny-by-default fallback policy. A new endpoint needs `.RequireAuthorization(Policies.X)`, or `.AllowAnonymous()` only for probes. Policies: `Staff`, `Reviewer` (admin+analyst), `Admin`, `PaymentsAccess` (staff+merchant).
+- Two schemes picked per request: an `X-Api-Key` header → `ApiKeyAuthenticationHandler` (merchant, cached for 30 s; evict on rotate/disable), otherwise a JWT bearer (staff). Use `Actor.From(httpContext)` to find out who is calling.
+- Merchant isolation: payment queries go through `Visible(db, http)`. Any new merchant-facing query must filter by `actor.MerchantId`.
+- Record human actions with `db.Audit(...)` **before** `SaveChanges`, so they commit together. `AuditLog` is append-only (DB trigger), so never update rows in it.
+- `SecurityBootstrapper` seeds the first admin and, with `Bootstrap:DemoData`, demo users and merchants. Integration tests sign in as admin via `SettleFlowFixture.Client`; use `ClientForUserAsync` or `ClientForApiKey` for other roles.
+- `ConnectionStrings:Postgres` and `Auth:JwtSigningKey` (≥32 chars) are required, with no defaults in code. Compose reads them from `.env`.
+
 ### Key patterns
 - **Emit events only through the outbox**: call `db.Enqueue(topic, key, data)` inside the handler and never produce to Kafka directly. `db.RecordTimeline(...)` adds a timeline entry. Every service runs `OutboxPublisher`, which claims rows with `FOR UPDATE SKIP LOCKED` and publishes a row only when no earlier unpublished row has the same (Topic, Key).
 - **New consumer**: subclass `PaymentEventWorker<T>` and implement `HandleAsync(envelope, db, ct)`, which mutates `db` without calling `SaveChanges`. The base class handles inbox dedup keyed by `(Consumer = class name, EventId)`, retries, transient-error waits, dead-lettering and offset storage. **Renaming a handler class changes its inbox key and its consumer group** (`{Kafka:GroupId}.{ClassName}`).

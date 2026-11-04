@@ -29,6 +29,14 @@ spec:
               value: {{ $.Values.kafka.bootstrapServers | quote }}
             - name: Kafka__GroupId
               value: {{ $svc.groupId | quote }}
+            {{- if $svc.expose }}
+            - name: Auth__JwtSigningKey
+              valueFrom: { secretKeyRef: { name: {{ $.Values.postgresSecret }}, key: jwt-signing-key } }
+            - name: Bootstrap__AdminPassword
+              valueFrom: { secretKeyRef: { name: {{ $.Values.postgresSecret }}, key: admin-password } }
+            - name: ASPNETCORE_FORWARDEDHEADERS_ENABLED
+              value: "true"
+            {{- end }}
             {{- with $.Values.otlpEndpoint }}
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: {{ . | quote }}

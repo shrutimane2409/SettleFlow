@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using SettleFlow.Api.Security;
 using SettleFlow.Infrastructure;
 
 namespace SettleFlow.Api.Operations;
@@ -10,12 +11,12 @@ public static class OperationsEndpoints
 
     public static IEndpointRouteBuilder MapOperationsEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/stats", GetStats).WithTags("Operations").WithSummary("Dashboard KPIs");
-        app.MapGet("/api/notifications", GetNotifications).WithTags("Operations");
+        app.MapGet("/api/stats", GetStats).WithTags("Operations").WithSummary("Dashboard KPIs").RequireAuthorization(Policies.Staff);
+        app.MapGet("/api/notifications", GetNotifications).WithTags("Operations").RequireAuthorization(Policies.Staff);
 
-        var dlq = app.MapGroup("/api/dead-letters").WithTags("Dead letters");
+        var dlq = app.MapGroup("/api/dead-letters").WithTags("Dead letters").RequireAuthorization(Policies.Staff);
         dlq.MapGet("", ListDeadLetters);
-        dlq.MapPost("{id:guid}/replay", ReplayDeadLetter)
+        dlq.MapPost("{id:guid}/replay", ReplayDeadLetter).RequireAuthorization(Policies.Admin)
             .WithSummary("Re-deliver a dead-lettered message to its consumer");
 
         return app;
@@ -95,7 +96,7 @@ public static class OperationsEndpoints
         return Results.Ok(await query.OrderByDescending(d => d.CreatedAt).Take(100).ToListAsync(ct));
     }
 
-    private static async Task<IResult> ReplayDeadLetter(Guid id, SettleFlowDbContext db, CancellationToken ct)
+    private static async Task<IResult> ReplayDeadLetter(Guid id, SettleFlowDbContext db, HttpContext http, CancellationToken ct)
     {
         var dl = await db.DeadLetters.SingleOrDefaultAsync(d => d.Id == id, ct);
         if (dl is null) return Results.NotFound();
@@ -123,6 +124,10 @@ public static class OperationsEndpoints
 
         if (Guid.TryParse(dl.Key, out var paymentId) && await db.Payments.AnyAsync(p => p.Id == paymentId, ct))
             db.RecordTimeline(paymentId, "DeadLetterReplayed", "api", $"Re-delivered {dl.Topic} to {dl.Consumer}");
+
+        var actor = Actor.From(http);
+        db.Audit(actor.Name, actor.Type, "deadletter.replayed", "dead_letter", dl.Id.ToString(),
+            new { dl.Topic, dl.Consumer, dl.Key }, actor.Ip);
 
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);

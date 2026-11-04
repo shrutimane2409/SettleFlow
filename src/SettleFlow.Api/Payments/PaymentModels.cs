@@ -14,7 +14,7 @@ public sealed record PaymentRequest(
     string? MerchantId,
     string? Country);
 
-public sealed record ReviewRequest(string? Decision, string? Reviewer, string? Note);
+public sealed record ReviewRequest(string? Decision, string? Note);
 
 public sealed record PaymentDto(
     Guid Id,

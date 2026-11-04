@@ -61,6 +61,8 @@ public sealed class InboxMessage
 
 public sealed class IdempotencyRecord
 {
+    /// <summary>Keys are scoped per merchant: two merchants may use the same key independently.</summary>
+    public string MerchantId { get; set; } = "";
     public string Key { get; set; } = "";
     public string RequestHash { get; set; } = "";
     public Guid PaymentId { get; set; }
@@ -111,6 +113,9 @@ public sealed class SettleFlowDbContext(DbContextOptions<SettleFlowDbContext> op
     public DbSet<PaymentEvent> PaymentEvents => Set<PaymentEvent>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<DeadLetter> DeadLetters => Set<DeadLetter>();
+    public DbSet<AppUser> Users => Set<AppUser>();
+    public DbSet<Merchant> Merchants => Set<Merchant>();
+    public DbSet<AuditEntry> AuditLog => Set<AuditEntry>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -144,8 +149,35 @@ public sealed class SettleFlowDbContext(DbContextOptions<SettleFlowDbContext> op
 
         b.Entity<IdempotencyRecord>(e =>
         {
-            e.HasKey(x => x.Key);
+            e.HasKey(x => new { x.MerchantId, x.Key });
+            e.Property(x => x.MerchantId).HasMaxLength(64);
             e.Property(x => x.Key).HasMaxLength(128);
+            e.HasIndex(x => x.CreatedAt);
+        });
+
+        b.Entity<AppUser>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Username).HasMaxLength(64);
+            e.Property(x => x.Role).HasMaxLength(16);
+            e.HasIndex(x => x.Username).IsUnique();
+        });
+
+        b.Entity<Merchant>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasMaxLength(64);
+            e.Property(x => x.Name).HasMaxLength(128);
+            e.HasIndex(x => x.ApiKeyHash).IsUnique();
+        });
+
+        b.Entity<AuditEntry>(e =>
+        {
+            e.ToTable("AuditLog");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Action).HasMaxLength(64);
+            e.HasIndex(x => x.OccurredAt);
+            e.HasIndex(x => new { x.Actor, x.OccurredAt });
         });
 
         b.Entity<PaymentEvent>(e =>

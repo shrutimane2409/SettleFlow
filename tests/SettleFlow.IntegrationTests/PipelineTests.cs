@@ -55,14 +55,14 @@ public sealed class PipelineTests(SettleFlowFixture f)
         await f.WaitForStatusAsync(created.Id, "FraudReview");
 
         var review = await f.Client.PostAsJsonAsync($"/api/payments/{created.Id}/review",
-            new { decision = "APPROVE", reviewer = "alice", note = "known customer" });
+            new { decision = "APPROVE", note = "known customer" });
         review.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var settled = await f.WaitForStatusAsync(created.Id, "Settled");
-        settled.ReviewedBy.Should().Be("alice");
+        settled.ReviewedBy.Should().Be("admin"); // taken from the signed-in user, not the request
 
         // A second review is rejected: the payment is no longer awaiting review.
-        var again = await f.Client.PostAsJsonAsync($"/api/payments/{created.Id}/review", new { decision = "REJECT", reviewer = "bob" });
+        var again = await f.Client.PostAsJsonAsync($"/api/payments/{created.Id}/review", new { decision = "REJECT" });
         again.StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 
@@ -72,7 +72,7 @@ public sealed class PipelineTests(SettleFlowFixture f)
         var created = await ReadPayment(await f.PostPaymentAsync(NewPayment(6000m), Key()));
         await f.WaitForStatusAsync(created.Id, "FraudReview");
 
-        (await f.Client.PostAsJsonAsync($"/api/payments/{created.Id}/review", new { decision = "REJECT", reviewer = "bob" }))
+        (await f.Client.PostAsJsonAsync($"/api/payments/{created.Id}/review", new { decision = "REJECT" }))
             .StatusCode.Should().Be(HttpStatusCode.OK);
 
         var declined = await f.WaitForStatusAsync(created.Id, "Declined");
@@ -179,6 +179,7 @@ public sealed class ApiContractTests(SettleFlowFixture f)
     public async Task Payments_can_be_filtered_and_paged()
     {
         var merchant = $"m_{Guid.NewGuid():N}"[..16];
+        await f.CreateMerchantAsync(merchant);
         for (var i = 0; i < 3; i++)
             await f.PostPaymentAsync(NewPayment(merchant: merchant), $"k-{Guid.NewGuid()}");
 

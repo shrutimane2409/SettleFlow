@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Activity, CreditCard, Inbox, RefreshCw, ShieldAlert } from 'lucide-react';
+import { Activity, CreditCard, FileClock, Inbox, LogOut, RefreshCw, ShieldAlert, Store, Users as UsersIcon } from 'lucide-react';
 import { api } from './api/client';
+import { can, session, useSession } from './auth';
 import { PaymentDrawer } from './components/PaymentDrawer';
 import { useHashRoute, usePolling } from './hooks';
+import { AuditLog, Merchants, Users } from './pages/Admin';
 import { DeadLetters } from './pages/DeadLetters';
+import { Login } from './pages/Login';
 import { Overview } from './pages/Overview';
 import { Payments } from './pages/Payments';
 import './styles.css';
@@ -14,9 +17,18 @@ const NAV = [
   { route: 'payments', label: 'Payments', icon: CreditCard, title: 'Payments', subtitle: 'Search and inspect every payment' },
   { route: 'review', label: 'Review queue', icon: ShieldAlert, title: 'Review queue', subtitle: 'Payments the risk engine wants a human to decide' },
   { route: 'dlq', label: 'Dead letters', icon: Inbox, title: 'Dead letters', subtitle: 'Failed messages, ready to replay' },
+  { route: 'merchants', label: 'Merchants', icon: Store, title: 'Merchants', subtitle: 'Accounts and API keys', admin: true },
+  { route: 'users', label: 'Users', icon: UsersIcon, title: 'Users', subtitle: 'Who can sign in, and what they can do', admin: true },
+  { route: 'audit', label: 'Audit log', icon: FileClock, title: 'Audit log', subtitle: 'Every human and merchant action, append-only', admin: true },
 ];
 
+function Root() {
+  const s = useSession();
+  return s ? <App /> : <Login />;
+}
+
 function App() {
+  const me = useSession();
   const [route] = useHashRoute();
   const [selected, setSelected] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -26,7 +38,8 @@ function App() {
   const { data: health, error: healthError } = usePolling(
     () => fetch(`${import.meta.env.VITE_API_URL ?? ''}/health/ready`).then(r => r.json() as Promise<{ status: string }>), 5000);
 
-  const current = NAV.find(n => n.route === route) ?? NAV[0];
+  const nav = NAV.filter(n => !n.admin || can.admin(me));
+  const current = nav.find(n => n.route === route) ?? nav[0];
   const healthy = !healthError && health?.status === 'Healthy';
 
   return (
@@ -37,7 +50,7 @@ function App() {
           <div><b>SettleFlow</b><span>Payment Operations</span></div>
         </div>
         <nav>
-          {NAV.map(({ route: r, label, icon: Icon }) => (
+          {nav.map(({ route: r, label, icon: Icon }) => (
             <a key={r} href={`#/${r}`} className={current.route === r ? 'active' : ''}>
               <Icon size={17} /> {label}
               {r === 'review' && !!stats?.reviewQueue && <em className="count warn">{stats.reviewQueue}</em>}
@@ -50,6 +63,10 @@ function App() {
           <a href="http://localhost:8082" target="_blank" rel="noreferrer">Kafka console ↗</a>
           <a href="http://localhost:16686" target="_blank" rel="noreferrer">Traces (Jaeger) ↗</a>
           <a href="http://localhost:3001" target="_blank" rel="noreferrer">Grafana ↗</a>
+        </div>
+        <div className="user-box">
+          <div><b>{me?.user.username}</b><span>{me?.user.role}</span></div>
+          <button title="Sign out" onClick={() => session.set(null)}><LogOut size={14} /></button>
         </div>
         <div className={`side-status ${healthy ? '' : 'down'}`}>
           <i /> {healthy ? 'All systems operational' : health ? `Degraded (${health.status})` : 'API unreachable'}
@@ -70,6 +87,9 @@ function App() {
         {current.route === 'payments' && <Payments onSelect={setSelected} tick={tick} />}
         {current.route === 'review' && <Payments onSelect={setSelected} tick={tick} fixedStatus="FraudReview" title="Awaiting manual review" />}
         {current.route === 'dlq' && <DeadLetters onSelect={setSelected} />}
+        {current.route === 'merchants' && <Merchants />}
+        {current.route === 'users' && <Users />}
+        {current.route === 'audit' && <AuditLog onSelect={setSelected} />}
       </main>
 
       {selected && <PaymentDrawer id={selected} onClose={() => setSelected(null)} onChanged={bump} />}
@@ -77,4 +97,4 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')!).render(<App />);
+createRoot(document.getElementById('root')!).render(<Root />);

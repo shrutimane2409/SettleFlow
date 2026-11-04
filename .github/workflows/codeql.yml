@@ -1,0 +1,29 @@
+name: CodeQL
+
+on:
+  push: { branches: [main] }
+  pull_request:
+  schedule: [{ cron: '0 6 * * 1' }]   # weekly, Monday 06:00 UTC
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions: { security-events: write, contents: read, actions: read }
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [csharp, javascript-typescript]
+    steps:
+      - uses: actions/checkout@v4
+      - if: matrix.language == 'csharp'
+        uses: actions/setup-dotnet@v4
+        with: { dotnet-version: '10.0.x' }
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.language == 'csharp' && 'manual' || 'none' }}
+          queries: security-and-quality
+      - if: matrix.language == 'csharp'
+        run: dotnet build SettleFlow.sln -c Release
+      - uses: github/codeql-action/analyze@v3
+        with: { category: "/language:${{ matrix.language }}" }

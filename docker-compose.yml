@@ -5,9 +5,12 @@
 #   Jaeger      http://localhost:16686
 #   Prometheus  http://localhost:9090
 #   Grafana     http://localhost:3001  (anonymous viewer; admin/admin)
+#
+# Secrets come from a .env file next to this one (see .env.example). The ${VAR:-default}
+# fallbacks are for local demos only: set real values before exposing the stack anywhere.
 
 x-dotnet-env: &dotnet-env
-  ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=settleflow;Username=settleflow;Password=settleflow
+  ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=settleflow;Username=settleflow;Password=${POSTGRES_PASSWORD:-settleflow}
   Kafka__BootstrapServers: redpanda:9092
   OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
 
@@ -23,7 +26,7 @@ services:
     environment:
       POSTGRES_DB: settleflow
       POSTGRES_USER: settleflow
-      POSTGRES_PASSWORD: settleflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-settleflow}
     ports: ["5432:5432"]
     volumes: ["postgres_data:/var/lib/postgresql/data"]
     healthcheck:
@@ -77,7 +80,13 @@ services:
     environment:
       <<: *dotnet-env
       ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"   # trust X-Forwarded-For from the nginx proxy (real client IP for rate limits/audit)
       Kafka__GroupId: settleflow-api
+      Auth__JwtSigningKey: ${JWT_SIGNING_KEY:-local-demo-signing-key-change-me-0123456789}
+      Bootstrap__AdminPassword: ${ADMIN_PASSWORD:-admin-change-me}
+      Bootstrap__DemoData: ${DEMO_DATA:-true}
+      Bootstrap__DemoPassword: ${DEMO_PASSWORD:-settleflow-demo}
+      Bootstrap__DemoMerchantApiKey: ${DEMO_MERCHANT_API_KEY:-sf_live_demo0000_local-demo-key-not-a-secret}
 
   fraud-worker:
     <<: *dotnet-service

@@ -188,3 +188,29 @@ main > .card { margin-top: 28px; }
   .tr { grid-template-columns: 1fr 1fr 1fr; }
   .tr > :nth-child(3), .tr > :nth-child(6) { display: none; }
 }
+
+/* ---------- auth & admin ---------- */
+select { font: inherit; font-size: 13px; display: block; width: 100%; margin-top: 5px; background: #0b111b; border: 1px solid #263143; color: #e8edf7; border-radius: 8px; padding: 9px 10px; }
+.small { font-size: 11px; }
+.login-page { min-height: 100vh; display: grid; place-items: center; background: radial-gradient(circle at 70% 10%, #172238 0, #0b0f17 45%); padding: 20px; }
+.login { width: min(380px, 100%); display: grid; gap: 14px; padding: 30px; }
+.login h1 { font-size: 22px; margin: 10px 0 0; }
+.user-box { margin-top: 24px; display: flex; align-items: center; justify-content: space-between; padding: 10px 13px; border: 1px solid var(--line); border-radius: 10px; }
+.user-box b { display: block; font-size: 12px; }
+.user-box span { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.user-box button { padding: 6px 8px; }
+.side-status { margin-top: 16px; }
+.app > aside nav + .side-links { margin-top: 28px; }
+.app > aside .user-box { margin-top: auto; }
+.inline-form { display: flex !important; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 16px; }
+.inline-form label { flex: 1; min-width: 160px; }
+.inline-form button { height: 38px; }
+.secret { border: 1px solid #1f5a39; background: rgba(18, 53, 34, .4); border-radius: 10px; padding: 14px; margin-bottom: 16px; }
+.secret .muted { margin: 4px 0 10px; }
+.secret-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.secret code { flex: 1; min-width: 260px; background: #0b111b; padding: 9px 10px; border-radius: 8px; word-break: break-all; color: var(--good); }
+.admin-table .tr { grid-template-columns: 1.2fr 1.4fr 1.2fr .8fr .8fr 1.4fr; }
+.audit-table .tr { grid-template-columns: .7fr 1fr 1.3fr .9fr 2fr .8fr; }
+.row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.row-actions button { padding: 5px 9px; font-size: 11px; }
+.chip-bad { background: var(--bad-bg); color: var(--bad); }

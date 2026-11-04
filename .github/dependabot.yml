@@ -1,0 +1,18 @@
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      opentelemetry: { patterns: ["OpenTelemetry*"] }
+      efcore: { patterns: ["Microsoft.EntityFrameworkCore*", "Npgsql*"] }
+      testing: { patterns: ["xunit*", "Microsoft.NET.Test.Sdk", "Testcontainers*", "FluentAssertions", "coverlet*"] }
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule: { interval: weekly }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directories: [/src/SettleFlow.Api, /src/SettleFlow.FraudWorker, /src/SettleFlow.SettlementWorker, /src/SettleFlow.NotificationWorker, /frontend]
+    schedule: { interval: weekly }
