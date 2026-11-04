@@ -45,6 +45,12 @@ public sealed class Merchant
     public bool Disabled { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? KeyRotatedAt { get; set; }
+
+    /// <summary>Where SettleFlow POSTs signed event notifications. Null = webhooks off.</summary>
+    public string? WebhookUrl { get; set; }
+
+    /// <summary>HMAC signing secret, encrypted at rest with ASP.NET Data Protection.</summary>
+    public string? WebhookSecretProtected { get; set; }
 }
 
 /// <summary>Append-only record of every human / merchant action. A database trigger rejects UPDATE, DELETE and TRUNCATE.</summary>

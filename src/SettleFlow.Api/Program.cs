@@ -6,11 +6,14 @@ using SettleFlow.Api.Payments;
 using SettleFlow.Api.Security;
 using SettleFlow.Api.Swagger;
 using SettleFlow.Infrastructure;
+using SettleFlow.Processing;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddSettleFlowDefaults("api");
 builder.AddSettleFlowAuth();
+builder.Services.AddWebhookSecrets(builder.Configuration);
+builder.Services.AddRetention(builder.Configuration);
 
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddProblemDetails();
@@ -76,6 +79,7 @@ app.UseSwaggerUI();
 app.MapSettleFlowDefaults();
 app.MapSecurityEndpoints();
 app.MapPaymentEndpoints();
+app.MapLifecycleEndpoints();
 app.MapOperationsEndpoints();
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription().AllowAnonymous();
 

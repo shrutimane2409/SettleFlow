@@ -54,8 +54,16 @@ settlement.completed / payments.failed → notification workers → notification
 - **Exceptions**: throw for retryable or business failures. After `MaxHandlerAttempts` the message goes to `DeadLetters` and `payments.dlq`. Infrastructure errors (`IsTransient`) retry forever.
 - `Payment.Version` maps to `xmin` (optimistic concurrency). `Status` is stored as a string.
 
+### Payments lifecycle (Phase 2)
+- Capture modes: `automatic` (default) settles after fraud approval. `manual` → `Authorized`, then `POST /capture` emits `payments.capture.requested` → `CaptureWorker`. Both paths use `SettlementProcessor`. `FraudCompleted.AwaitingCapture` tells `SettlementWorker` to skip.
+- Refunds: the API reserves the amount on `Payment.RefundedAmount` (xmin makes concurrent refunds conflict), then `refunds.requested` → `RefundWorker`. On failure the reservation is released.
+- `ISettlementGateway` = `ResilientSettlementGateway` (timeout + per-merchant circuit breaker) wrapping `SimulatedSettlementGateway`. The simulator is idempotent via `AcquirerTransactions`, written in **its own scope** on purpose, because it plays an external system.
+- Webhooks: `WebhookEnqueueWorker` (a second consumer of `notifications.requested`) creates `WebhookDeliveries`; `WebhookDispatcher` leases rows (`UPDATE … RETURNING` with SKIP LOCKED), signs with `WebhookSignature`, and sends through the SSRF-guarded `"webhooks"` HttpClient. Secrets are protected with Data Protection (key ring in the `DataProtectionKeys` table, shared by all services, application name `SettleFlow`).
+- `RetentionService` (hosted in the API) purges old rows and voids expired authorizations. Tests call `RunOnceAsync` directly, with `Retention:Enabled=false`.
+- Policies: `PaymentsWrite` (admin, analyst, merchant) for create/capture/void/refund; `PaymentsAccess` for reads.
+
 ### Demo hooks (`SettlementOptions`)
-`merchant_outage` always throws (ends in the DLQ), `blocked_*` merchants are declined, and only EUR/GBP/USD are supported. Random transient failures run at `TransientFailureRate` (set to 0 in the integration tests).
+`merchant_outage` always throws (circuit opens, then the DLQ). `merchant_slow` exceeds the timeout. `blocked_*` merchants are declined, and only EUR/GBP/USD are supported. Random transient failures run at `TransientFailureRate` (set to 0 in the integration tests).
 
 ### Other
 - In Docker, nginx (`frontend/nginx.conf`) proxies `/api` and `/health` to the API, so the dashboard uses relative URLs. CORS is only needed for the Vite dev server.

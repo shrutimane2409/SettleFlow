@@ -29,12 +29,52 @@ A payment goes through risk scoring, optional manual review, settlement with a (
 ### Payment lifecycle
 
 ```text
-PendingFraud ─► FraudApproved ─► Settled
-     │               └────────► SettlementFailed   (acquirer declined)
-     ├─► FraudReview ─(approve)─► FraudApproved ─► …
+PendingFraud ─► FraudApproved ─► Settled ─► PartiallyRefunded ─► Refunded
+     │               └────────► SettlementFailed          (acquirer declined)
+     ├─► Authorized ─(capture)─► FraudApproved ─► Settled  (captureMode: manual)
+     │        └──────(void / 7-day expiry)──► Voided
+     ├─► FraudReview ─(approve)─► FraudApproved / Authorized
      │        └─────(reject)──► Declined
-     └─► Declined                                  (risk score ≥ 50)
+     └─► Declined                                         (risk score ≥ 50)
 ```
+
+## Payments API
+
+| Action | Endpoint | Notes |
+|---|---|---|
+| Create | `POST /api/payments` | `Idempotency-Key` required. Optional `"captureMode": "manual"` to authorize only |
+| Capture | `POST /api/payments/{id}/capture` | `{ "amount": 150 }` (optional, default full); partial capture allowed |
+| Void | `POST /api/payments/{id}/void` | Releases an authorization. Uncaptured ones auto-void after 7 days |
+| Refund | `POST /api/payments/{id}/refunds` | `Idempotency-Key` required. `{ "amount": 30, "reason": "…" }`, partial or full. Concurrent refunds can never exceed the captured amount |
+| Refunds | `GET /api/payments/{id}/refunds`, `GET /api/refunds` | |
+| Webhook URL | `PUT /api/merchants/me/webhook` (merchant) or `PUT /api/merchants/{id}/webhook` (admin) | Returns the signing secret **once** |
+| Deliveries | `GET /api/webhook-deliveries`, `POST /api/webhook-deliveries/{id}/resend` | |
+
+## Webhooks
+
+Merchant-facing events (`payment.authorized`, `payment.settled`, `payment.failed`, `payment.voided`, `refund.succeeded`, `refund.failed`) are POSTed to the merchant's URL with:
+
+```
+SettleFlow-Event: payment.settled
+SettleFlow-Delivery: 5b0c…            (unique per delivery, use it to dedupe)
+SettleFlow-Signature: t=1730700000,v1=9f2c…  (HMAC-SHA256 of "{t}.{raw body}" with your signing secret)
+```
+
+Verify the signature before trusting a webhook:
+
+```csharp
+var ok = SettleFlow.Processing.WebhookSignature.Verify(secret, signatureHeader, rawBody, TimeSpan.FromMinutes(5));
+```
+```js
+const [t, v1] = header.split(',').map(p => p.split('=')[1]);
+const expected = crypto.createHmac('sha256', secret).update(`${t}.${rawBody}`).digest('hex');
+const ok = crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(v1)) && Math.abs(Date.now()/1000 - t) < 300;
+```
+
+- Non-2xx responses or timeouts (5 s) are retried at 10 s, 30 s, 2 m, 10 m, 30 m, 1 h, 3 h, then marked `Failed`. They can be resent from the dashboard or API.
+- Signing secrets are encrypted at rest (ASP.NET Data Protection, with a key ring shared by all services in Postgres).
+- **SSRF protection**: http(s) only, no credentials in the URL, and no private, loopback, link-local or cloud-metadata addresses. The IP is checked when connecting, which defeats DNS rebinding. Redirects are not followed.
+- Locally, `merchant_demo` sends to the `webhook-receiver` container: `docker compose logs -f webhook-receiver`.
 
 ## Reliability features
 
@@ -45,6 +85,9 @@ PendingFraud ─► FraudApproved ─► Settled
 | Kafka delivers a message twice | **Inbox** per consumer `(Consumer, EventId)`, written in the handler's transaction. Handlers also check the payment's state, so they are idempotent. |
 | Client retries a POST | `Idempotency-Key` header stored with a unique constraint and a hash of the request. Same key and body: the same payment is returned (`Idempotent-Replayed: true`). Same key with a different body: `409`. Race-safe under concurrency. |
 | Database or broker briefly down | Transient errors are retried with backoff and **never skip** the message. |
+| Acquirer slow or down | 2 s **timeout** plus a **circuit breaker per merchant** (Polly). After repeated failures, calls fail fast for 15 s instead of piling up, and other merchants are unaffected. Gauge: `settleflow_acquirer_circuit_open` |
+| Retried acquirer call | The acquirer is **idempotent**: every capture or refund is recorded by `(operation, reference)` outside our transaction, and a repeat returns the recorded result. A crash between "bank charged" and "we committed" can't double-charge. |
+| Tables growing forever | **Retention job** (hourly, single-instance via advisory lock): idempotency keys 24 h, inbox 14 d, notifications and webhook deliveries 30 d |
 | A message that keeps failing (poison) | Retried `Kafka:MaxHandlerAttempts` times (default 5), then **dead-lettered**: stored in `DeadLetters`, published to `payments.dlq`, and **replayable** from the dashboard or API. |
 | Two people review the same payment | Optimistic concurrency (Postgres `xmin`): the second reviewer gets `409`. |
 | Request floods | Per-IP fixed-window rate limit on `POST /api/payments`. |
@@ -93,6 +136,7 @@ docker compose up --build
 | API + Swagger | http://localhost:8083/swagger |
 | Health | http://localhost:8083/health |
 | Kafka console (Redpanda) | http://localhost:8082 |
+| Webhook receiver (demo merchant) | http://localhost:8084 (`docker compose logs -f webhook-receiver`) |
 | Traces (Jaeger) | http://localhost:16686 |
 | Grafana | http://localhost:3001 |
 | Prometheus | http://localhost:9090 |
@@ -109,7 +153,10 @@ The dashboard's **Create payment** card has presets for each of these:
 | High amount | 6000 EUR, DE | Review queue → approve/reject |
 | Risky | 7500 EUR, US | Declined (score 70) |
 | Blocked merchant | merchant `blocked_shop` | SettlementFailed |
-| Acquirer outage | merchant `merchant_outage` | 5 retries → dead-letter queue → replay |
+| Acquirer outage | merchant `merchant_outage` | Retries, circuit opens, dead-letter queue, replay |
+| Slow acquirer | merchant `merchant_slow` | 2 s timeout, circuit breaker, dead-letter queue |
+| Manual capture | `captureMode: manual` | Authorized → capture (or void) from the drawer → Settled |
+| Refund | any settled payment | Refund from the drawer → PartiallyRefunded / Refunded, plus a `refund.succeeded` webhook |
 
 ### API examples
 
@@ -188,4 +235,4 @@ k8s/, helm/                     Kubernetes manifests and Helm chart
 
 ## Not included (yet)
 
-A real acquirer integration, schema-registry contracts (Avro/Protobuf), and outbound merchant webhooks. The structure is designed so each can be added without changing the payment API contract.
+A real acquirer integration, schema-registry contracts (Avro/Protobuf), and multi-acquirer routing. The structure is designed so each can be added without changing the payment API contract.

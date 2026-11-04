@@ -12,9 +12,23 @@ public sealed record PaymentRequest(
     string? Currency,
     string? CustomerId,
     string? MerchantId,
-    string? Country);
+    string? Country,
+    string? CaptureMode = null);
 
 public sealed record ReviewRequest(string? Decision, string? Note);
+public sealed record CaptureRequest(decimal? Amount);
+public sealed record VoidRequest(string? Reason);
+public sealed record RefundRequest(decimal? Amount, string? Reason);
+public sealed record WebhookConfigRequest(string? Url);
+
+public sealed record RefundDto(
+    Guid Id, Guid PaymentId, string MerchantId, decimal Amount, string Currency, string? Reason,
+    RefundStatus Status, string? AcquirerReference, string? FailureReason, string CreatedBy,
+    DateTimeOffset CreatedAt, DateTimeOffset? CompletedAt)
+{
+    public static RefundDto From(Refund r) => new(r.Id, r.PaymentId, r.MerchantId, r.Amount, r.Currency, r.Reason,
+        r.Status, r.AcquirerReference, r.FailureReason, r.CreatedBy, r.CreatedAt, r.CompletedAt);
+}
 
 public sealed record PaymentDto(
     Guid Id,
@@ -30,12 +44,26 @@ public sealed record PaymentDto(
     string? FailureReason,
     string? ReviewedBy,
     string? ReviewNote,
+    string CaptureMode,
+    decimal? CapturedAmount,
+    decimal RefundedAmount,
+    decimal RefundableAmount,
+    DateTimeOffset? AuthorizedAt,
+    DateTimeOffset? SettledAt,
+    DateTimeOffset? VoidedAt,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt)
 {
     public static PaymentDto From(Payment p) => new(
         p.Id, p.Amount, p.Currency, p.CustomerId, p.MerchantId, p.Country, p.Status, p.RiskScore,
-        p.RiskReasons, p.SettlementReference, p.FailureReason, p.ReviewedBy, p.ReviewNote, p.CreatedAt, p.UpdatedAt);
+        p.RiskReasons, p.SettlementReference, p.FailureReason, p.ReviewedBy, p.ReviewNote,
+        p.CaptureMode, p.CapturedAmount, p.RefundedAmount, Refundable(p),
+        p.AuthorizedAt, p.SettledAt, p.VoidedAt, p.CreatedAt, p.UpdatedAt);
+
+    public static decimal Refundable(Payment p) =>
+        p.Status is PaymentStatus.Settled or PaymentStatus.PartiallyRefunded
+            ? Math.Max(0, (p.CapturedAmount ?? p.Amount) - p.RefundedAmount)
+            : 0;
 }
 
 public sealed record PagedResult<T>(IReadOnlyList<T> Items, int Page, int PageSize, int Total);
@@ -73,13 +101,27 @@ public static partial class PaymentRequestValidator
         if (r.MerchantId is null || !IdRegex().IsMatch(r.MerchantId))
             Add("merchantId", "MerchantId is required: 1-64 chars of letters, digits, _ - . :");
 
-        if (string.IsNullOrWhiteSpace(idempotencyKey))
-            Add("Idempotency-Key", "The Idempotency-Key header is required.");
-        else if (idempotencyKey.Length > MaxIdempotencyKeyLength)
-            Add("Idempotency-Key", $"The Idempotency-Key header must be at most {MaxIdempotencyKeyLength} characters.");
+        if (r.CaptureMode is not (null or CaptureModes.Automatic or CaptureModes.Manual))
+            Add("captureMode", "captureMode must be 'automatic' (default) or 'manual'.");
 
+        ValidateIdempotencyKey(idempotencyKey, errors);
         return errors;
     }
+
+    public static void ValidateIdempotencyKey(string? idempotencyKey, Dictionary<string, string[]> errors)
+    {
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+            errors["Idempotency-Key"] = ["The Idempotency-Key header is required."];
+        else if (idempotencyKey.Length > MaxIdempotencyKeyLength)
+            errors["Idempotency-Key"] = [$"The Idempotency-Key header must be at most {MaxIdempotencyKeyLength} characters."];
+    }
+
+    /// <summary>Positive, at most 2 decimals, and at most <paramref name="max"/>.</summary>
+    public static string? ValidateAmount(decimal amount, decimal max) =>
+        amount <= 0 ? "Amount must be greater than 0."
+        : decimal.Round(amount, 2) != amount ? "Amount cannot have more than 2 decimal places."
+        : amount > max ? $"Amount cannot exceed {max:0.00}."
+        : null;
 
     /// <summary>Fingerprint of the normalised request, so a reused key with a different body is detected.</summary>
     public static string Hash(PaymentRequest r)
@@ -90,6 +132,8 @@ public static partial class PaymentRequestValidator
             r.CustomerId,
             r.MerchantId,
             r.Country!.ToUpperInvariant());
+        // Only manual capture changes the fingerprint, so hashes of existing (automatic) keys stay valid.
+        if (r.CaptureMode == CaptureModes.Manual) canonical += "|manual";
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
     }
 }

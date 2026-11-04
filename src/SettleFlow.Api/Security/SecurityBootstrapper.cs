@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SettleFlow.Infrastructure;
+using SettleFlow.Processing;
 
 namespace SettleFlow.Api.Security;
 
@@ -17,6 +18,9 @@ public sealed class BootstrapOptions
 
     /// <summary>Optional fixed API key for <c>merchant_demo</c>, handy for local curl examples.</summary>
     public string? DemoMerchantApiKey { get; set; }
+
+    /// <summary>Optional webhook URL configured for <c>merchant_demo</c> (e.g. a local echo server).</summary>
+    public string? DemoWebhookUrl { get; set; }
 }
 
 /// <summary>Creates the first admin (and optional demo data) on an empty database.</summary>
@@ -70,6 +74,20 @@ public static class SecurityBootstrapper
         }
 
         await db.SaveChangesAsync(ct);
+
+        if (options.DemoData && !string.IsNullOrWhiteSpace(options.DemoWebhookUrl))
+        {
+            var demo = await db.Merchants.SingleOrDefaultAsync(m => m.Id == "merchant_demo", ct);
+            if (demo is { WebhookUrl: null })
+            {
+                var secret = WebhookSecrets.Generate();
+                demo.WebhookUrl = options.DemoWebhookUrl;
+                demo.WebhookSecretProtected = scope.ServiceProvider.GetRequiredService<WebhookSecrets>().Protect(secret);
+                db.Audit("system", "system", "merchant.webhook_configured", "merchant", demo.Id, new { url = demo.WebhookUrl, seeded = true });
+                await db.SaveChangesAsync(ct);
+                log.LogInformation("Demo webhook for merchant_demo → {Url} (signing secret {Secret})", demo.WebhookUrl, secret);
+            }
+        }
     }
 
     private static void AddUser(SettleFlowDbContext db, string username, string password, string role)

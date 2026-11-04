@@ -13,7 +13,7 @@ public static class PaymentEndpoints
     {
         var group = app.MapGroup("/api/payments").WithTags("Payments").RequireAuthorization(Policies.PaymentsAccess);
 
-        group.MapPost("", CreatePayment).RequireRateLimiting("payments")
+        group.MapPost("", CreatePayment).RequireRateLimiting("payments").RequireAuthorization(Policies.PaymentsWrite)
             .WithSummary("Create a payment (requires an Idempotency-Key header)");
         group.MapGet("", ListPayments).WithSummary("List payments with filtering and pagination");
         group.MapGet("{id:guid}", GetPayment);
@@ -65,6 +65,7 @@ public static class PaymentEndpoints
             MerchantId = request.MerchantId!,
             Country = request.Country!.ToUpperInvariant(),
             Status = PaymentStatus.PendingFraud,
+            CaptureMode = request.CaptureMode ?? CaptureModes.Automatic,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -112,10 +113,10 @@ public static class PaymentEndpoints
     }
 
     /// <summary>Staff see every payment; a merchant only sees its own.</summary>
-    private static IQueryable<Payment> Visible(SettleFlowDbContext db, HttpContext http)
+    internal static IQueryable<Payment> Visible(SettleFlowDbContext db, HttpContext http, bool tracking = false)
     {
         var actor = Actor.From(http);
-        var q = db.Payments.AsNoTracking();
+        var q = tracking ? db.Payments : db.Payments.AsNoTracking();
         return actor.IsMerchant ? q.Where(p => p.MerchantId == actor.MerchantId) : q;
     }
 
@@ -210,9 +211,11 @@ public static class PaymentEndpoints
 
         if (decision == "APPROVE")
         {
-            payment.Status = PaymentStatus.FraudApproved;
+            var manual = payment.CaptureMode == CaptureModes.Manual;
+            payment.Status = manual ? PaymentStatus.Authorized : PaymentStatus.FraudApproved;
+            if (manual) payment.AuthorizedAt = now;
             db.Enqueue(Topics.FraudCompleted, key,
-                new FraudCompleted(payment.Id, FraudDecisions.Approved, payment.RiskScore ?? 0, [.. reasons, "manual_approval"], now, reviewer));
+                new FraudCompleted(payment.Id, FraudDecisions.Approved, payment.RiskScore ?? 0, [.. reasons, "manual_approval"], now, reviewer, AwaitingCapture: manual));
             db.RecordTimeline(payment.Id, "ReviewApproved", "api", $"Approved by {reviewer}{(note is null ? "" : $": {note}")}");
         }
         else

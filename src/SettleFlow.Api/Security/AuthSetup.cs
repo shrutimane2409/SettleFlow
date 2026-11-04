@@ -31,8 +31,10 @@ public static class Policies
     /// <summary>Staff who may make decisions: approve/reject reviews.</summary>
     public const string Reviewer = "reviewer";
     public const string Admin = "admin";
-    /// <summary>Staff or merchants: may create and read payments (merchants only their own).</summary>
+    /// <summary>Staff or merchants: may read payments (merchants only their own).</summary>
     public const string PaymentsAccess = "payments";
+    /// <summary>May create / capture / void / refund payments: admin, analyst, merchant (not viewer).</summary>
+    public const string PaymentsWrite = "payments-write";
 }
 
 public static class AuthSetup
@@ -89,7 +91,8 @@ public static class AuthSetup
             .AddPolicy(Policies.Staff, p => p.RequireRole(Roles.Staff))
             .AddPolicy(Policies.Reviewer, p => p.RequireRole(Roles.Admin, Roles.Analyst))
             .AddPolicy(Policies.Admin, p => p.RequireRole(Roles.Admin))
-            .AddPolicy(Policies.PaymentsAccess, p => p.RequireRole([.. Roles.Staff, Roles.Merchant]));
+            .AddPolicy(Policies.PaymentsAccess, p => p.RequireRole([.. Roles.Staff, Roles.Merchant]))
+            .AddPolicy(Policies.PaymentsWrite, p => p.RequireRole(Roles.Admin, Roles.Analyst, Roles.Merchant));
 
         return builder;
     }

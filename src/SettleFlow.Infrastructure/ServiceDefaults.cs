@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -36,6 +37,12 @@ public static class ServiceDefaults
         var connectionString = config.GetConnectionString("Postgres")
             ?? throw new InvalidOperationException("ConnectionStrings:Postgres is not configured (env var ConnectionStrings__Postgres).");
         builder.Services.AddDbContext<SettleFlowDbContext>(o => o.UseNpgsql(connectionString));
+
+        // One key ring for every service (stored in Postgres), so a secret protected by the API
+        // can be unprotected by the notification worker.
+        builder.Services.AddDataProtection()
+            .SetApplicationName("SettleFlow")
+            .PersistKeysToDbContext<SettleFlowDbContext>();
 
         builder.Services.Configure<KafkaOptions>(config.GetSection("Kafka"));
         builder.Services.Configure<OutboxOptions>(config.GetSection("Outbox"));

@@ -3,11 +3,16 @@ export type PaymentStatus =
   | 'FraudApproved'
   | 'FraudReview'
   | 'Declined'
+  | 'Authorized'
+  | 'Voided'
   | 'Settled'
-  | 'SettlementFailed';
+  | 'SettlementFailed'
+  | 'PartiallyRefunded'
+  | 'Refunded';
 
 export const ALL_STATUSES: PaymentStatus[] = [
-  'PendingFraud', 'FraudApproved', 'FraudReview', 'Settled', 'Declined', 'SettlementFailed',
+  'PendingFraud', 'FraudReview', 'Authorized', 'FraudApproved', 'Settled', 'PartiallyRefunded', 'Refunded',
+  'Declined', 'SettlementFailed', 'Voided',
 ];
 
 export const STATUS_LABEL: Record<PaymentStatus, string> = {
@@ -17,6 +22,10 @@ export const STATUS_LABEL: Record<PaymentStatus, string> = {
   Declined: 'Declined',
   Settled: 'Settled',
   SettlementFailed: 'Settlement failed',
+  Authorized: 'Authorized',
+  Voided: 'Voided',
+  PartiallyRefunded: 'Partially refunded',
+  Refunded: 'Refunded',
 };
 
 export interface Payment {
@@ -33,8 +42,45 @@ export interface Payment {
   failureReason: string | null;
   reviewedBy: string | null;
   reviewNote: string | null;
+  captureMode: 'automatic' | 'manual';
+  capturedAmount: number | null;
+  refundedAmount: number;
+  refundableAmount: number;
+  authorizedAt: string | null;
+  settledAt: string | null;
+  voidedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Refund {
+  id: string;
+  paymentId: string;
+  merchantId: string;
+  amount: number;
+  currency: string;
+  reason: string | null;
+  status: 'Pending' | 'Succeeded' | 'Failed';
+  acquirerReference: string | null;
+  failureReason: string | null;
+  createdBy: string;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface WebhookDelivery {
+  id: string;
+  merchantId: string;
+  eventType: string;
+  paymentId: string | null;
+  url: string;
+  status: 'Pending' | 'Delivered' | 'Failed';
+  attempts: number;
+  nextAttemptAt: string;
+  lastStatusCode: number | null;
+  lastError: string | null;
+  createdAt: string;
+  deliveredAt: string | null;
 }
 
 export interface NewPayment {
@@ -43,6 +89,7 @@ export interface NewPayment {
   customerId: string;
   merchantId: string;
   country: string;
+  captureMode?: 'automatic' | 'manual';
 }
 
 export interface Page<T> {
@@ -99,6 +146,7 @@ export interface Merchant {
   disabled: boolean;
   createdAt: string;
   keyRotatedAt: string | null;
+  webhookUrl: string | null;
 }
 
 export interface User {

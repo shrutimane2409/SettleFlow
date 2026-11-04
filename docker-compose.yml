@@ -87,6 +87,8 @@ services:
       Bootstrap__DemoData: ${DEMO_DATA:-true}
       Bootstrap__DemoPassword: ${DEMO_PASSWORD:-settleflow-demo}
       Bootstrap__DemoMerchantApiKey: ${DEMO_MERCHANT_API_KEY:-sf_live_demo0000_local-demo-key-not-a-secret}
+      Bootstrap__DemoWebhookUrl: http://webhook-receiver:8080/settleflow
+      Webhooks__AllowPrivateNetworks: "true"   # local demo only: the receiver is on the docker network
 
   fraud-worker:
     <<: *dotnet-service
@@ -109,6 +111,15 @@ services:
     environment:
       <<: *dotnet-env
       Kafka__GroupId: settleflow-notification
+      Webhooks__AllowPrivateNetworks: "true"   # local demo only
+
+  # Stand-in for a merchant's server: logs every webhook it receives (docker compose logs -f webhook-receiver).
+  webhook-receiver:
+    image: mendhak/http-https-echo:37
+    environment:
+      HTTP_PORT: 8080
+      LOG_IGNORE_PATH: /health
+    ports: ["8084:8080"]
 
   frontend:
     build: ./frontend

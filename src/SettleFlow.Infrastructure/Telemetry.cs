@@ -20,6 +20,12 @@ public static class SettleFlowTelemetry
     public static readonly Counter<long> Settlements =
         Meter.CreateCounter<long>("settleflow.settlements", description: "Settlement attempts by outcome");
 
+    public static readonly Counter<long> Refunds =
+        Meter.CreateCounter<long>("settleflow.refunds", description: "Refund attempts by outcome");
+
+    public static readonly Counter<long> WebhookDeliveries =
+        Meter.CreateCounter<long>("settleflow.webhooks.deliveries", description: "Webhook delivery attempts by outcome");
+
     public static readonly Counter<long> EventsProcessed =
         Meter.CreateCounter<long>("settleflow.events.processed", description: "Consumed events by consumer and outcome");
 

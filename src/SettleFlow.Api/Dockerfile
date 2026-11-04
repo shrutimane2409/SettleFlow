@@ -4,6 +4,7 @@ WORKDIR /src
 COPY Directory.Packages.props ./
 COPY src/SettleFlow.Contracts/SettleFlow.Contracts.csproj src/SettleFlow.Contracts/
 COPY src/SettleFlow.Infrastructure/SettleFlow.Infrastructure.csproj src/SettleFlow.Infrastructure/
+COPY src/SettleFlow.Processing/SettleFlow.Processing.csproj src/SettleFlow.Processing/
 COPY src/SettleFlow.Api/SettleFlow.Api.csproj src/SettleFlow.Api/
 RUN dotnet restore src/SettleFlow.Api/SettleFlow.Api.csproj
 COPY src/ src/

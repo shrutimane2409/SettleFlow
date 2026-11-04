@@ -2,7 +2,11 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Collections.Concurrent;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -26,6 +30,17 @@ public sealed class SettleFlowFixture : IAsyncLifetime
 
     private WebApplicationFactory<Program>? _api;
     private IHost? _workers;
+    private WebApplication? _receiver;
+
+    /// <summary>Requests received by the fake merchant webhook endpoint, keyed by path.</summary>
+    public ConcurrentQueue<ReceivedWebhook> Webhooks { get; } = new();
+    public string WebhookBaseUrl { get; private set; } = "";
+    private readonly ConcurrentDictionary<string, int> _failuresLeft = new();
+
+    /// <summary>Make the receiver answer 500 the next <paramref name="times"/> requests for this path.</summary>
+    public void FailWebhook(string path, int times) => _failuresLeft[path] = times;
+
+    public IServiceProvider ApiServices => _api!.Services;
 
     public const string AdminPassword = "integration-admin-pw";
     public const string DemoPassword = "integration-demo-pw";
@@ -49,12 +64,19 @@ public sealed class SettleFlowFixture : IAsyncLifetime
         ["Auth:JwtSigningKey"] = "integration-tests-signing-key-0123456789abcdef",
         ["Bootstrap:AdminPassword"] = AdminPassword,
         ["Bootstrap:DemoData"] = "true",
-        ["Bootstrap:DemoPassword"] = DemoPassword
+        ["Bootstrap:DemoPassword"] = DemoPassword,
+        ["Webhooks:AllowPrivateNetworks"] = "true",
+        ["Webhooks:BaseRetryDelay"] = "00:00:00.200",
+        ["Webhooks:PollInterval"] = "00:00:00.100",
+        ["Settlement:Timeout"] = "00:00:00.500",
+        ["Settlement:SlowLatencyMs"] = "2000",
+        ["Retention:Enabled"] = "false"
     };
 
     public async Task InitializeAsync()
     {
         await Task.WhenAll(_postgres.StartAsync(), _redpanda.StartAsync());
+        await StartWebhookReceiverAsync();
         var settings = Settings();
 
         _api = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
@@ -75,8 +97,31 @@ public sealed class SettleFlowFixture : IAsyncLifetime
         await _workers.StartAsync();
     }
 
+    private async Task StartWebhookReceiverAsync()
+    {
+        var b = WebApplication.CreateSlimBuilder();
+        b.WebHost.UseUrls("http://127.0.0.1:0");
+        _receiver = b.Build();
+        _receiver.MapPost("/{**path}", async (HttpContext ctx) =>
+        {
+            var body = await new StreamReader(ctx.Request.Body).ReadToEndAsync();
+            var path = ctx.Request.Path.Value!;
+            if (_failuresLeft.TryGetValue(path, out var left) && left > 0)
+            {
+                _failuresLeft[path] = left - 1;
+                return Results.StatusCode(500);
+            }
+            Webhooks.Enqueue(new ReceivedWebhook(path, ctx.Request.Headers["SettleFlow-Event"].ToString(),
+                ctx.Request.Headers["SettleFlow-Signature"].ToString(), body));
+            return Results.Ok();
+        });
+        await _receiver.StartAsync();
+        WebhookBaseUrl = _receiver.Urls.First();
+    }
+
     public async Task DisposeAsync()
     {
+        if (_receiver is not null) await _receiver.DisposeAsync();
         if (_workers is not null) { await _workers.StopAsync(); _workers.Dispose(); }
         if (_api is not null) await _api.DisposeAsync();
         await Task.WhenAll(_postgres.DisposeAsync().AsTask(), _redpanda.DisposeAsync().AsTask());
@@ -121,13 +166,15 @@ public sealed class SettleFlowFixture : IAsyncLifetime
         return await client.SendAsync(request);
     }
 
-    public static object NewPayment(decimal amount = 123.45m, string country = "IE", string merchant = "merchant_demo", string currency = "EUR") => new
+    public static object NewPayment(decimal amount = 123.45m, string country = "IE", string merchant = "merchant_demo",
+        string currency = "EUR", string? captureMode = null) => new
     {
         amount,
         currency,
         customerId = $"cust_{Guid.NewGuid():N}"[..20],
         merchantId = merchant,
-        country
+        country,
+        captureMode
     };
 
     /// <summary>Polls the API until the payment reaches the expected status.</summary>
@@ -160,7 +207,10 @@ public sealed class SettleFlowFixture : IAsyncLifetime
 
 public sealed record PaymentView(
     Guid Id, decimal Amount, string Currency, string Status, int? RiskScore, string[] RiskReasons,
-    string? SettlementReference, string? FailureReason, string? ReviewedBy);
+    string? SettlementReference, string? FailureReason, string? ReviewedBy,
+    string CaptureMode = "automatic", decimal? CapturedAmount = null, decimal RefundedAmount = 0, decimal RefundableAmount = 0);
+
+public sealed record ReceivedWebhook(string Path, string Event, string Signature, string Body);
 
 public sealed record LoginResponse(string Token, DateTimeOffset ExpiresAt);
 

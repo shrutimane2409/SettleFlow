@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Activity, CreditCard, FileClock, Inbox, LogOut, RefreshCw, ShieldAlert, Store, Users as UsersIcon } from 'lucide-react';
+import { Activity, CreditCard, FileClock, Inbox, LogOut, RefreshCw, ShieldAlert, Store, Users as UsersIcon, Webhook } from 'lucide-react';
 import { api } from './api/client';
 import { can, session, useSession } from './auth';
 import { PaymentDrawer } from './components/PaymentDrawer';
@@ -10,6 +10,7 @@ import { DeadLetters } from './pages/DeadLetters';
 import { Login } from './pages/Login';
 import { Overview } from './pages/Overview';
 import { Payments } from './pages/Payments';
+import { Webhooks } from './pages/Webhooks';
 import './styles.css';
 
 const NAV = [
@@ -17,6 +18,7 @@ const NAV = [
   { route: 'payments', label: 'Payments', icon: CreditCard, title: 'Payments', subtitle: 'Search and inspect every payment' },
   { route: 'review', label: 'Review queue', icon: ShieldAlert, title: 'Review queue', subtitle: 'Payments the risk engine wants a human to decide' },
   { route: 'dlq', label: 'Dead letters', icon: Inbox, title: 'Dead letters', subtitle: 'Failed messages, ready to replay' },
+  { route: 'webhooks', label: 'Webhooks', icon: Webhook, title: 'Webhooks', subtitle: 'Signed event deliveries to merchants' },
   { route: 'merchants', label: 'Merchants', icon: Store, title: 'Merchants', subtitle: 'Accounts and API keys', admin: true },
   { route: 'users', label: 'Users', icon: UsersIcon, title: 'Users', subtitle: 'Who can sign in, and what they can do', admin: true },
   { route: 'audit', label: 'Audit log', icon: FileClock, title: 'Audit log', subtitle: 'Every human and merchant action, append-only', admin: true },
@@ -87,6 +89,7 @@ function App() {
         {current.route === 'payments' && <Payments onSelect={setSelected} tick={tick} />}
         {current.route === 'review' && <Payments onSelect={setSelected} tick={tick} fixedStatus="FraudReview" title="Awaiting manual review" />}
         {current.route === 'dlq' && <DeadLetters onSelect={setSelected} />}
+        {current.route === 'webhooks' && <Webhooks onSelect={setSelected} />}
         {current.route === 'merchants' && <Merchants />}
         {current.route === 'users' && <Users />}
         {current.route === 'audit' && <AuditLog onSelect={setSelected} />}

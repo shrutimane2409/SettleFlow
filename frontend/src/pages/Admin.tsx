@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Copy, KeyRound, Plus } from 'lucide-react';
+import { Copy, KeyRound, Plus, Webhook } from 'lucide-react';
 import { api } from '../api/client';
 import { Card, Empty } from '../components/ui';
 import { timeAgo, usePolling } from '../hooks';
@@ -15,12 +15,12 @@ function useAction() {
   return { error, busy, run };
 }
 
-/** Shows a freshly issued API key exactly once. */
-function SecretBanner({ secret, onDone }: { secret: { id: string; apiKey: string }; onDone: () => void }) {
+/** Shows a freshly issued secret (API key or webhook signing secret) exactly once. */
+function SecretBanner({ secret, onDone }: { secret: { id: string; apiKey: string; label?: string }; onDone: () => void }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="secret">
-      <b>API key for {secret.id}</b>
+      <b>{secret.label ?? 'API key'} for {secret.id}</b>
       <p className="muted">Copy it now. It is stored only as a hash and can't be shown again.</p>
       <div className="secret-row">
         <code className="mono">{secret.apiKey}</code>
@@ -37,8 +37,19 @@ export function Merchants() {
   const { data, refresh } = usePolling(api.merchants, 10000);
   const [id, setId] = useState('');
   const [name, setName] = useState('');
-  const [secret, setSecret] = useState<{ id: string; apiKey: string } | null>(null);
+  const [secret, setSecret] = useState<{ id: string; apiKey: string; label?: string } | null>(null);
   const { error, busy, run } = useAction();
+
+  const setWebhook = (merchantId: string, current: string | null) => run(async () => {
+    const url = window.prompt(`Webhook URL for ${merchantId} (empty to disable)`, current ?? 'https://');
+    if (url === null) return;
+    if (url.trim() === '') { await api.disableWebhook(merchantId); }
+    else {
+      const r = await api.configureWebhook(merchantId, url.trim());
+      setSecret({ id: merchantId, apiKey: r.signingSecret, label: 'Webhook signing secret' });
+    }
+    await refresh();
+  });
 
   return (
     <Card title="Merchants" aside={data ? `${data.length} merchants` : 'Loading…'} className="wide">
@@ -54,15 +65,16 @@ export function Merchants() {
       {secret && <SecretBanner secret={secret} onDone={() => setSecret(null)} />}
 
       <div className="table admin-table">
-        <div className="tr th"><span>Merchant</span><span>Name</span><span>API key</span><span>Status</span><span>Created</span><span /></div>
+        <div className="tr th"><span>Merchant</span><span>Name</span><span>API key</span><span>Webhook</span><span>Status</span><span /></div>
         {(data ?? []).map(m => (
           <div className="tr" key={m.id}>
             <span className="mono">{m.id}</span>
             <span className="ellipsis">{m.name}</span>
-            <span className="mono muted-text">{m.apiKeyPrefix}…</span>
+            <span className="mono muted-text" title={`issued ${timeAgo(m.keyRotatedAt ?? m.createdAt)}`}>{m.apiKeyPrefix}…</span>
+            <span className="ellipsis muted-text" title={m.webhookUrl ?? ''}>{m.webhookUrl ?? 'off'}</span>
             <span><em className={`badge ${m.disabled ? 'declined' : 'settled'}`}>{m.disabled ? 'Disabled' : 'Active'}</em></span>
-            <span className="muted-text">{timeAgo(m.keyRotatedAt ?? m.createdAt)}</span>
             <span className="row-actions">
+              <button disabled={busy} title="Set the webhook URL" onClick={() => setWebhook(m.id, m.webhookUrl)}><Webhook size={13} /> Webhook</button>
               <button disabled={busy} title="Issue a new key; the old one stops working immediately"
                 onClick={() => run(async () => { setSecret(await api.rotateMerchantKey(m.id)); await refresh(); })}>
                 <KeyRound size={13} /> Rotate

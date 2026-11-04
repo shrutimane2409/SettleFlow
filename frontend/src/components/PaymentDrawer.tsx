@@ -1,37 +1,100 @@
 import { useState } from 'react';
-import { Check, X } from 'lucide-react';
+import { Ban, Check, HandCoins, Undo2, X } from 'lucide-react';
 import { api } from '../api/client';
 import { can, useSession } from '../auth';
-import { formatMoney, usePolling } from '../hooks';
+import { formatMoney, timeAgo, usePolling } from '../hooks';
+import type { Payment } from '../types';
 import { RiskMeter, StatusBadge } from './ui';
 
 const EVENT_ICON: Record<string, string> = {
-  Created: '●', FraudScored: '◆', ReviewApproved: '✓', ReviewRejected: '✕',
-  Settled: '✓', SettlementDeclined: '✕', Notified: '✉', DeadLetterReplayed: '↻',
+  Created: '●', FraudScored: '◆', ReviewApproved: '✓', ReviewRejected: '✕', Authorized: '⏸',
+  CaptureRequested: '↧', Voided: '⊘', Settled: '✓', SettlementDeclined: '✕', RefundRequested: '↺',
+  Refunded: '↺', RefundFailed: '✕', Notified: '✉', DeadLetterReplayed: '↻',
 };
 
-export function PaymentDrawer({ id, onClose, onChanged }: { id: string; onClose: () => void; onChanged: () => void }) {
-  const { data: payment, refresh: refreshPayment } = usePolling(() => api.payment(id), 1500, [id]);
-  const { data: timeline, refresh: refreshTimeline } = usePolling(() => api.timeline(id), 1500, [id]);
-  const me = useSession();
-  const [note, setNote] = useState('');
+function useAction(onDone: () => Promise<unknown> | void) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  const review = async (decision: 'APPROVE' | 'REJECT') => {
+  const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
     setError(null);
-    try {
-      await api.review(id, decision, note || undefined);
-      setNote('');
-      await Promise.all([refreshPayment(), refreshTimeline()]);
-      onChanged();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
+    try { await fn(); await onDone(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
+  return { error, busy, run };
+}
+
+function ReviewBox({ payment, onDone }: { payment: Payment; onDone: () => Promise<unknown> }) {
+  const me = useSession();
+  const [note, setNote] = useState('');
+  const { error, busy, run } = useAction(onDone);
+  const review = (d: 'APPROVE' | 'REJECT') => run(async () => { await api.review(payment.id, d, note || undefined); setNote(''); });
+
+  return (
+    <div className="action-box warn-box">
+      <h3>Manual review</h3>
+      <p className="muted small">Reviewing as <b>{me?.user.username}</b>. Your decision is recorded in the audit log.</p>
+      <label>Note<input value={note} placeholder="optional" onChange={e => setNote(e.target.value)} /></label>
+      <div className="form-actions">
+        <button className="approve" disabled={busy} onClick={() => review('APPROVE')}><Check size={15} /> Approve</button>
+        <button className="reject" disabled={busy} onClick={() => review('REJECT')}><X size={15} /> Reject</button>
+      </div>
+      {error && <p className="form-msg error">{error}</p>}
+    </div>
+  );
+}
+
+function CaptureBox({ payment, onDone }: { payment: Payment; onDone: () => Promise<unknown> }) {
+  const [amount, setAmount] = useState(String(payment.amount));
+  const { error, busy, run } = useAction(onDone);
+  return (
+    <div className="action-box info-box">
+      <h3>Authorized: funds on hold</h3>
+      <p className="muted small">Capture all or part of {formatMoney(payment.amount, payment.currency)}, or void to release the hold.
+        Uncaptured authorizations are voided automatically after 7 days.</p>
+      <label>Amount to capture<input value={amount} onChange={e => setAmount(e.target.value)} /></label>
+      <div className="form-actions">
+        <button className="approve" disabled={busy} onClick={() => run(() => api.capture(payment.id, Number(amount)))}><HandCoins size={15} /> Capture</button>
+        <button className="reject" disabled={busy} onClick={() => run(() => api.void(payment.id, 'voided from dashboard'))}><Ban size={15} /> Void</button>
+      </div>
+      {error && <p className="form-msg error">{error}</p>}
+    </div>
+  );
+}
+
+function RefundBox({ payment, onDone }: { payment: Payment; onDone: () => Promise<unknown> }) {
+  const [amount, setAmount] = useState('');
+  const [reason, setReason] = useState('');
+  const { error, busy, run } = useAction(onDone);
+  return (
+    <div className="action-box">
+      <h3>Refund</h3>
+      <p className="muted small">Refundable now: <b>{formatMoney(payment.refundableAmount, payment.currency)}</b></p>
+      <div className="fields two">
+        <label>Amount<input value={amount} placeholder={`${payment.refundableAmount} (full)`} onChange={e => setAmount(e.target.value)} /></label>
+        <label>Reason<input value={reason} placeholder="optional" onChange={e => setReason(e.target.value)} /></label>
+      </div>
+      <button disabled={busy} onClick={() => run(async () => {
+        await api.refund(payment.id, amount ? Number(amount) : undefined, reason || undefined);
+        setAmount(''); setReason('');
+      })}><Undo2 size={15} /> Issue refund</button>
+      {error && <p className="form-msg error">{error}</p>}
+    </div>
+  );
+}
+
+export function PaymentDrawer({ id, onClose, onChanged }: { id: string; onClose: () => void; onChanged: () => void }) {
+  const me = useSession();
+  const { data: payment, refresh: refreshPayment } = usePolling(() => api.payment(id), 1500, [id]);
+  const { data: timeline, refresh: refreshTimeline } = usePolling(() => api.timeline(id), 1500, [id]);
+  const { data: refunds, refresh: refreshRefunds } = usePolling(() => api.refunds(id), 2500, [id]);
+  const { data: deliveries } = usePolling(() => api.webhookDeliveries({ paymentId: id }), 3000, [id]);
+
+  const refreshAll = async () => {
+    await Promise.all([refreshPayment(), refreshTimeline(), refreshRefunds()]);
+    onChanged();
+  };
+
+  const canWrite = can.createPayments(me);
 
   return (
     <div className="drawer-backdrop" onClick={onClose}>
@@ -55,6 +118,9 @@ export function PaymentDrawer({ id, onClose, onChanged }: { id: string; onClose:
               <dt>Customer</dt><dd>{payment.customerId}</dd>
               <dt>Merchant</dt><dd>{payment.merchantId}</dd>
               <dt>Country</dt><dd>{payment.country}</dd>
+              <dt>Capture</dt><dd>{payment.captureMode}</dd>
+              {payment.capturedAmount != null && (<><dt>Captured</dt><dd>{formatMoney(payment.capturedAmount, payment.currency)}</dd></>)}
+              {payment.refundedAmount > 0 && (<><dt>Refunded</dt><dd>{formatMoney(payment.refundedAmount, payment.currency)}</dd></>)}
               <dt>Risk</dt><dd><RiskMeter score={payment.riskScore} /></dd>
               {payment.riskReasons.length > 0 && (<><dt>Signals</dt><dd>{payment.riskReasons.map(r => <span key={r} className="chip">{r}</span>)}</dd></>)}
               {payment.settlementReference && (<><dt>Reference</dt><dd className="mono">{payment.settlementReference}</dd></>)}
@@ -62,17 +128,40 @@ export function PaymentDrawer({ id, onClose, onChanged }: { id: string; onClose:
               {payment.reviewedBy && (<><dt>Reviewed by</dt><dd>{payment.reviewedBy}{payment.reviewNote ? ` — “${payment.reviewNote}”` : ''}</dd></>)}
             </dl>
 
-            {payment.status === 'FraudReview' && can.review(me) && (
-              <div className="review-box">
-                <h3>Manual review</h3>
-                <p className="muted small">Reviewing as <b>{me?.user.username}</b>. Your decision is recorded in the audit log.</p>
-                <label>Note<input value={note} placeholder="optional" onChange={e => setNote(e.target.value)} /></label>
-                <div className="form-actions">
-                  <button className="approve" disabled={busy} onClick={() => review('APPROVE')}><Check size={15} /> Approve</button>
-                  <button className="reject" disabled={busy} onClick={() => review('REJECT')}><X size={15} /> Reject</button>
+            {payment.status === 'FraudReview' && can.review(me) && <ReviewBox payment={payment} onDone={refreshAll} />}
+            {payment.status === 'Authorized' && canWrite && <CaptureBox payment={payment} onDone={refreshAll} />}
+            {payment.refundableAmount > 0 && canWrite && <RefundBox payment={payment} onDone={refreshAll} />}
+
+            {(refunds ?? []).length > 0 && (
+              <>
+                <h3>Refunds</h3>
+                <div className="mini-list">
+                  {refunds!.map(r => (
+                    <div key={r.id} className="mini-row">
+                      <span>{formatMoney(r.amount, r.currency)}</span>
+                      <em className={`badge ${r.status === 'Succeeded' ? 'settled' : r.status === 'Failed' ? 'declined' : 'pendingfraud'}`}>{r.status}</em>
+                      <span className="muted-text small ellipsis">{r.reason ?? r.failureReason ?? r.acquirerReference ?? ''}</span>
+                      <span className="muted-text small">{r.createdBy} · {timeAgo(r.createdAt)}</span>
+                    </div>
+                  ))}
                 </div>
-                {error && <p className="form-msg error">{error}</p>}
-              </div>
+              </>
+            )}
+
+            {(deliveries ?? []).length > 0 && (
+              <>
+                <h3>Webhooks</h3>
+                <div className="mini-list">
+                  {deliveries!.map(d => (
+                    <div key={d.id} className="mini-row">
+                      <span className="mono small">{d.eventType}</span>
+                      <em className={`badge ${d.status === 'Delivered' ? 'settled' : d.status === 'Failed' ? 'declined' : 'pendingfraud'}`}>{d.status}</em>
+                      <span className="muted-text small">{d.attempts} attempt{d.attempts === 1 ? '' : 's'}{d.lastStatusCode ? ` · HTTP ${d.lastStatusCode}` : ''}</span>
+                      <span className="muted-text small">{timeAgo(d.createdAt)}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
 
             <h3>Timeline</h3>
