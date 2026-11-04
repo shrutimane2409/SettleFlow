@@ -96,6 +96,7 @@ app.MapOperationsEndpoints();
 app.MapFinanceEndpoints();
 app.MapLiveStreamEndpoints();
 app.MapFraudEndpoints();
+app.MapAnalyticsEndpoints();
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription().AllowAnonymous();
 
 // Kubernetes runs `dotnet SettleFlow.Api.dll --migrate-only` as a pre-upgrade Job: migrate, seed, exit.

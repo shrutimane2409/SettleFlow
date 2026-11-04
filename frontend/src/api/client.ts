@@ -1,5 +1,5 @@
 import { session, type Session } from '../auth';
-import type { BlocklistEntry, FraudPerformance, FraudRules, FraudRulesView, Simulation, AuditEntry, DeadLetter, LedgerAccount, LedgerEntryRow, Merchant, NewPayment, Notification, Page, Payment, Payout, PayoutDetail, ReconItem, ReconRun, Refund, Stats, TimelineEntry, TrialBalance, User, WebhookDelivery } from '../types';
+import type { AnalyticsData, BlocklistEntry, FraudPerformance, FraudRules, FraudRulesView, Simulation, AuditEntry, DeadLetter, LedgerAccount, LedgerEntryRow, Merchant, NewPayment, Notification, Page, Payment, Payout, PayoutDetail, ReconItem, ReconRun, Refund, Stats, TimelineEntry, TrialBalance, User, WebhookDelivery } from '../types';
 
 /** Empty by default: requests go to the same origin and are proxied (nginx in Docker, Vite in dev). */
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
@@ -132,6 +132,17 @@ export const api = {
   removeBlocklist: (id: string) => request<void>(`/api/fraud/blocklist/${id}`, { method: 'DELETE' }),
   chargeback: (paymentId: string, reasonCode: string, blocklistCustomer: boolean) =>
     request<unknown>(`/api/payments/${paymentId}/chargebacks`, { method: 'POST', body: JSON.stringify({ reasonCode, blocklistCustomer }) }),
+
+  analytics: (days: number) => request<AnalyticsData>(`/api/analytics?days=${days}`),
+  async downloadPaymentsCsv(params: { status?: string; q?: string }) {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => v && qs.set(k, v));
+    const res = await fetch(`${BASE}/api/payments/export.csv?${qs}`, { headers: { Authorization: `Bearer ${session.get()?.token}` } });
+    if (!res.ok) throw new ApiError(res.status, 'Export failed');
+    const url = URL.createObjectURL(await res.blob());
+    Object.assign(document.createElement('a'), { href: url, download: `payments-${new Date().toISOString().slice(0, 16)}.csv` }).click();
+    URL.revokeObjectURL(url);
+  },
 
   notifications: (take = 15) => request<Notification[]>(`/api/notifications?take=${take}`),
 

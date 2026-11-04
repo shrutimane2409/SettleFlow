@@ -59,6 +59,11 @@ PendingFraud ─► FraudApproved ─► Settled ─► PartiallyRefunded ─►
 - **Feedback loop**: `GET /api/fraud/performance` shows per rule how often it fires and how many approved payments were later charged back ("missed fraud"), plus approval and chargeback rates per rule version.
 - **ML hook**: `IRiskModel` (default `HeuristicRiskModel`, a small logistic stand-in). Enable with `modelEnabled`; a probability above `modelThreshold` adds `modelScore`. Swap in a trained model by registering another `IRiskModel`.
 
+## Analytics & export
+
+- `GET /api/analytics?days=30`: daily payments by outcome and settled volume, top merchants (approval rate, average risk, refunds, chargebacks), countries, and fraud-reason breakdown. It's all computed in SQL (`GROUP BY`, `FILTER`, `jsonb_array_elements_text`), and the dashboard shows it on the Analytics page.
+- `GET /api/payments/export.csv?status=&q=&from=&to=`: **streams** up to 100k rows with constant memory. Merchants only export their own payments. Text cells are quoted and protected against spreadsheet formula injection.
+
 ## Money: ledger, payouts, reconciliation
 
 **Double-entry ledger.** Every movement of money is a ledger transaction whose entries sum to zero (debit +, credit −), posted **in the same DB transaction** as the payment state change:

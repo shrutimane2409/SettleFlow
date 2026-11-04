@@ -293,3 +293,11 @@ export interface FraudPerformance {
 }
 
 export interface BlocklistEntry { id: string; type: string; value: string; reason: string; createdBy: string; createdAt: string; expiresAt: string | null }
+
+export interface AnalyticsData {
+  days: number;
+  daily: { day: string; payments: number; approved: number; review: number; declined: number; chargebacks: number; settledVolume: number }[];
+  merchants: { merchantId: string; payments: number; settled: number; settledVolume: number; avgRisk: number; refunds: number; chargebacks: number; approvalRate: number }[];
+  countries: { country: string; payments: number; avgRisk: number; approvalRate: number }[];
+  reasons: { reason: string; count: number }[];
+}

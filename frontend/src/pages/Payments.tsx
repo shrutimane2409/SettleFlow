@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Search } from 'lucide-react';
 import { api } from '../api/client';
 import { PaymentsTable } from '../components/PaymentsTable';
 import { Card } from '../components/ui';
@@ -22,7 +22,11 @@ export function Payments({ onSelect, tick, fixedStatus, title }: {
   const pages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
 
   return (
-    <Card title={title ?? 'All payments'} aside={data ? `${data.total} payments` : 'Loading…'} className="wide">
+    <Card title={title ?? 'All payments'} className="wide" aside={
+      <span className="header-actions">
+        {data ? `${data.total} payments` : 'Loading…'}
+        <button onClick={() => api.downloadPaymentsCsv({ status, q: query })} title="Export the current filter as CSV"><Download size={13} /> CSV</button>
+      </span>}>
       {!fixedStatus && (
         <div className="filters">
           <form className="search" onSubmit={e => { e.preventDefault(); setPage(1); setQuery(q); }}>
