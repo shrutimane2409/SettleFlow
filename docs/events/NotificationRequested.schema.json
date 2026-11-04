@@ -1,0 +1,36 @@
+{
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "PaymentId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "Type": {
+      "type": "string"
+    },
+    "Message": {
+      "type": "string"
+    },
+    "OccurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "RefundId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "default": null
+    }
+  },
+  "required": [
+    "PaymentId",
+    "Type",
+    "Message",
+    "OccurredAt"
+  ]
+}

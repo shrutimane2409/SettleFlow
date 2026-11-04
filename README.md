@@ -114,6 +114,13 @@ Operational alerts: service down, dead letters, outbox backlog, consumer lag, ac
 - PodDisruptionBudgets, an HPA for the API (CPU), and **KEDA** autoscaling for workers based on **Kafka consumer lag** (`keda.enabled=true`).
 - Rolling updates with `maxUnavailable: 0`.
 
+## API contracts
+
+- **Conditional requests**: `GET /api/payments/{id}` returns an `ETag` (the row version), and `If-None-Match` gives a `304`. Review, capture, void and refund honor `If-Match`: acting on a stale copy returns **412** instead of overwriting someone else's change.
+- **OpenAPI is a tested contract**: `frontend/openapi.json` is a snapshot of `/swagger/v1/swagger.json`, and an integration test fails if they diverge. Response DTOs are fully typed (required/nullable). CI checks that the dashboard's TypeScript types have exactly the API's fields (`npm run check:contract`).
+- **Event contracts**: the JSON Schema of every Kafka event is committed in `docs/events/`, and unit tests fail on any unreviewed change. A test also proves old messages still deserialize. Consumers dead-letter envelopes with a `Version` newer than they support (safe rolling deploys), so they can be replayed after the upgrade.
+- After an intentional change: `SETTLEFLOW_UPDATE_SNAPSHOTS=1 make test`, review the diff, and bump the event `Version` if old consumers can't read the new shape.
+
 ## Webhooks
 
 Merchant-facing events (`payment.authorized`, `payment.settled`, `payment.failed`, `payment.voided`, `refund.succeeded`, `refund.failed`, `payout.paid`) are POSTed to the merchant's URL with:

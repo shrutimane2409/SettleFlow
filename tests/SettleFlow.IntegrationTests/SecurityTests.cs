@@ -27,7 +27,9 @@ public sealed class SecurityTests(SettleFlowFixture f)
     [InlineData("/health/live")]
     [InlineData("/health/ready")]
     [InlineData("/metrics")]
-    public async Task Probes_and_metrics_stay_public(string path) =>
+    [InlineData("/swagger/v1/swagger.json")]
+    [InlineData("/swagger/index.html")]
+    public async Task Probes_metrics_and_docs_stay_public(string path) =>
         (await f.AnonymousClient().GetAsync(path)).StatusCode.Should().Be(HttpStatusCode.OK);
 
     [Fact]

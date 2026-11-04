@@ -1,0 +1,2320 @@
+{
+  "openapi": "3.0.4",
+  "info": {
+    "title": "SettleFlow.Api",
+    "version": "1.0"
+  },
+  "paths": {
+    "/api/audit": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Append-only log of every human and merchant action",
+        "parameters": [
+          {
+            "name": "actor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "targetId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "take",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/users": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/users/{id}/disable": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/users/{id}/enable": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/analytics": {
+      "get": {
+        "tags": [
+          "Analytics"
+        ],
+        "summary": "Daily trends, merchants, countries and fraud reasons (computed in SQL)",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Exchange username \u002B password for a bearer token",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "The current user or merchant",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/dead-letters": {
+      "get": {
+        "tags": [
+          "Dead letters"
+        ],
+        "parameters": [
+          {
+            "name": "includeReplayed",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/dead-letters/{id}/replay": {
+      "post": {
+        "tags": [
+          "Dead letters"
+        ],
+        "summary": "Re-deliver a dead-lettered message to its consumer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/chargebacks": {
+      "get": {
+        "tags": [
+          "Fraud"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/fraud/rules": {
+      "get": {
+        "tags": [
+          "Fraud"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Fraud"
+        ],
+        "summary": "Activate a new rule-set version (takes effect within ~5s)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveRulesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/fraud/simulate": {
+      "post": {
+        "tags": [
+          "Fraud"
+        ],
+        "summary": "Re-score recent payments with candidate rules",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/fraud/performance": {
+      "get": {
+        "tags": [
+          "Fraud"
+        ],
+        "summary": "How each rule performs against actual chargebacks",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/fraud/blocklist": {
+      "get": {
+        "tags": [
+          "Fraud"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Fraud"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlocklistRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/fraud/blocklist/{id}": {
+      "delete": {
+        "tags": [
+          "Fraud"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/balance": {
+      "get": {
+        "tags": [
+          "Ledger"
+        ],
+        "summary": "A merchant\u0027s balance not yet paid out (merchants: own; staff: ?merchantId=)",
+        "parameters": [
+          {
+            "name": "merchantId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/ledger/accounts": {
+      "get": {
+        "tags": [
+          "Ledger"
+        ],
+        "summary": "All ledger accounts with balances",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/ledger/accounts/{accountId}/entries": {
+      "get": {
+        "tags": [
+          "Ledger"
+        ],
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "take",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/ledger/transactions": {
+      "get": {
+        "tags": [
+          "Ledger"
+        ],
+        "parameters": [
+          {
+            "name": "reference",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "take",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/ledger/trial-balance": {
+      "get": {
+        "tags": [
+          "Ledger"
+        ],
+        "summary": "Debits and credits per currency; must net to zero",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/stream/token": {
+      "post": {
+        "tags": [
+          "Live"
+        ],
+        "summary": "Short-lived token for GET /api/stream?access_token=\u2026 (EventSource can\u0027t send headers)",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/stream": {
+      "get": {
+        "tags": [
+          "Live"
+        ],
+        "summary": "Server-Sent Events: \u0027payment\u0027 events as payments change, \u0027ping\u0027 every 15s",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectSseItem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/merchants/{id}/fees": {
+      "put": {
+        "tags": [
+          "Merchants"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/merchants": {
+      "get": {
+        "tags": [
+          "Merchants"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Merchants"
+        ],
+        "summary": "Create a merchant. The API key is returned once and cannot be retrieved later.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMerchantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/merchants/{id}/rotate-key": {
+      "post": {
+        "tags": [
+          "Merchants"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/merchants/{id}/disable": {
+      "post": {
+        "tags": [
+          "Merchants"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/merchants/{id}/enable": {
+      "post": {
+        "tags": [
+          "Merchants"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/stats": {
+      "get": {
+        "tags": [
+          "Operations"
+        ],
+        "summary": "Dashboard KPIs",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/notifications": {
+      "get": {
+        "tags": [
+          "Operations"
+        ],
+        "parameters": [
+          {
+            "name": "take",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/payments/{id}/refunds": {
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RefundDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Refund a settled payment, fully or partially (requires Idempotency-Key)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefundRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefundDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payments/{id}/chargebacks": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Record a dispute/chargeback reported by the acquirer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChargebackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/payments/export.csv": {
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Stream payments as CSV (same filters as the list; merchants get only their own)",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/payments": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Create a payment (requires an Idempotency-Key header)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaymentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "List payments with filtering and pagination",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentDtoPagedResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payments/{id}": {
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentDto"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/api/payments/{id}/timeline": {
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Everything that happened to the payment, in order",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/payments/{id}/review": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Approve or reject a payment held for manual review",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Precondition Failed",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payments/{id}/capture": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Capture an authorized (manual-capture) payment, fully or partially",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaptureRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payments/{id}/void": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Release an authorization without capturing it",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoidRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payouts": {
+      "get": {
+        "tags": [
+          "Payouts"
+        ],
+        "parameters": [
+          {
+            "name": "merchantId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "take",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/payouts/{id}": {
+      "get": {
+        "tags": [
+          "Payouts"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/payouts/{id}/report.csv": {
+      "get": {
+        "tags": [
+          "Payouts"
+        ],
+        "summary": "Line-item report for a payout",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/payouts/run": {
+      "post": {
+        "tags": [
+          "Payouts"
+        ],
+        "summary": "Batch payouts now instead of waiting for the schedule",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/reconciliation/runs": {
+      "post": {
+        "tags": [
+          "Reconciliation"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunReconciliationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Reconciliation"
+        ],
+        "parameters": [
+          {
+            "name": "take",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/reconciliation/runs/{id}": {
+      "get": {
+        "tags": [
+          "Reconciliation"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/reconciliation/items/{id}/resolve": {
+      "post": {
+        "tags": [
+          "Reconciliation"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/refunds": {
+      "get": {
+        "tags": [
+          "Refunds"
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "take",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RefundDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/merchants/{merchantId}/webhook": {
+      "put": {
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Set a merchant\u0027s webhook URL. Returns a new signing secret once.",
+        "parameters": [
+          {
+            "name": "merchantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Webhooks"
+        ],
+        "parameters": [
+          {
+            "name": "merchantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/merchants/me/webhook": {
+      "put": {
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Merchant: set your own webhook URL",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/webhook-deliveries": {
+      "get": {
+        "tags": [
+          "Webhooks"
+        ],
+        "parameters": [
+          {
+            "name": "merchantId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "paymentId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "take",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/webhook-deliveries/{deliveryId}/resend": {
+      "post": {
+        "tags": [
+          "Webhooks"
+        ],
+        "parameters": [
+          {
+            "name": "deliveryId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BlocklistRequest": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "value": {
+            "type": "string",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresInDays": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CaptureRequest": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChargebackRequest": {
+        "required": [
+          "blocklistCustomer"
+        ],
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "reasonCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "blocklistCustomer": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateMerchantRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateUserRequest": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "nullable": true
+          },
+          "password": {
+            "type": "string",
+            "nullable": true
+          },
+          "role": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "FeeRequest": {
+        "type": "object",
+        "properties": {
+          "feeBps": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "feeFixed": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "FraudOptions": {
+        "required": [
+          "blocklistEnabled",
+          "countryRiskEnabled",
+          "countryRiskScore",
+          "declineThreshold",
+          "highAmountEnabled",
+          "highAmountScore",
+          "highAmountThreshold",
+          "lowRiskCountries",
+          "modelEnabled",
+          "modelScore",
+          "modelThreshold",
+          "reviewThreshold",
+          "roundAmountEnabled",
+          "roundAmountMultiple",
+          "roundAmountScore",
+          "velocityEnabled",
+          "velocityLimit",
+          "velocityScore",
+          "velocityWindow"
+        ],
+        "type": "object",
+        "properties": {
+          "highAmountEnabled": {
+            "type": "boolean"
+          },
+          "highAmountThreshold": {
+            "type": "number",
+            "format": "double"
+          },
+          "highAmountScore": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "countryRiskEnabled": {
+            "type": "boolean"
+          },
+          "lowRiskCountries": {
+            "type": "string"
+          },
+          "countryRiskScore": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "roundAmountEnabled": {
+            "type": "boolean"
+          },
+          "roundAmountMultiple": {
+            "type": "number",
+            "format": "double"
+          },
+          "roundAmountScore": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "velocityEnabled": {
+            "type": "boolean"
+          },
+          "velocityLimit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "velocityWindow": {
+            "type": "string",
+            "format": "date-span"
+          },
+          "velocityScore": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "blocklistEnabled": {
+            "type": "boolean"
+          },
+          "modelEnabled": {
+            "type": "boolean"
+          },
+          "modelThreshold": {
+            "type": "number",
+            "format": "double"
+          },
+          "modelScore": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "reviewThreshold": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "declineThreshold": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "HttpValidationProblemDetails": {
+        "required": [
+          "errors"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true
+          },
+          "instance": {
+            "type": "string",
+            "nullable": true
+          },
+          "errors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "additionalProperties": {}
+      },
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "nullable": true
+          },
+          "password": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ObjectSseItem": {
+        "required": [
+          "eventType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "enum": [
+              null
+            ],
+            "nullable": true
+          },
+          "eventType": {
+            "type": "string"
+          },
+          "eventId": {
+            "type": "string",
+            "nullable": true
+          },
+          "reconnectionInterval": {
+            "type": "string",
+            "format": "date-span",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PaymentDto": {
+        "required": [
+          "amount",
+          "authorizedAt",
+          "capturedAmount",
+          "captureMode",
+          "chargebackAmount",
+          "country",
+          "createdAt",
+          "currency",
+          "customerId",
+          "failureReason",
+          "feeAmount",
+          "id",
+          "merchantId",
+          "payoutId",
+          "refundableAmount",
+          "refundedAmount",
+          "reviewedBy",
+          "reviewNote",
+          "riskModelScore",
+          "riskReasons",
+          "riskRuleSetVersion",
+          "riskScore",
+          "settledAt",
+          "settlementReference",
+          "status",
+          "updatedAt",
+          "voidedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "customerId": {
+            "type": "string"
+          },
+          "merchantId": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PaymentStatus"
+          },
+          "riskScore": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "riskReasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "settlementReference": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "reviewedBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "reviewNote": {
+            "type": "string",
+            "nullable": true
+          },
+          "captureMode": {
+            "type": "string"
+          },
+          "capturedAmount": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "refundedAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "refundableAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "feeAmount": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "payoutId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "riskRuleSetVersion": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "riskModelScore": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "chargebackAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "authorizedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "settledAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "voidedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PaymentDtoPagedResult": {
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaymentDto"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PaymentRequest": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "currency": {
+            "type": "string",
+            "nullable": true
+          },
+          "customerId": {
+            "type": "string",
+            "nullable": true
+          },
+          "merchantId": {
+            "type": "string",
+            "nullable": true
+          },
+          "country": {
+            "type": "string",
+            "nullable": true
+          },
+          "captureMode": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PaymentStatus": {
+        "enum": [
+          "PendingFraud",
+          "FraudApproved",
+          "FraudReview",
+          "Declined",
+          "Authorized",
+          "Voided",
+          "Settled",
+          "SettlementFailed",
+          "PartiallyRefunded",
+          "Refunded",
+          "ChargedBack"
+        ],
+        "type": "string"
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true
+          },
+          "instance": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": {}
+      },
+      "RefundDto": {
+        "required": [
+          "acquirerReference",
+          "amount",
+          "completedAt",
+          "createdAt",
+          "createdBy",
+          "currency",
+          "failureReason",
+          "id",
+          "merchantId",
+          "paymentId",
+          "reason",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "paymentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "merchantId": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "$ref": "#/components/schemas/RefundStatus"
+          },
+          "acquirerReference": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RefundRequest": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RefundStatus": {
+        "enum": [
+          "Pending",
+          "Succeeded",
+          "Failed"
+        ],
+        "type": "string"
+      },
+      "ResolveRequest": {
+        "type": "object",
+        "properties": {
+          "note": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReviewRequest": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "type": "string",
+            "nullable": true
+          },
+          "note": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RunReconciliationRequest": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SaveRulesRequest": {
+        "type": "object",
+        "properties": {
+          "rules": {
+            "$ref": "#/components/schemas/FraudOptions"
+          },
+          "comment": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SimulateRequest": {
+        "required": [
+          "days",
+          "maxPayments"
+        ],
+        "type": "object",
+        "properties": {
+          "rules": {
+            "$ref": "#/components/schemas/FraudOptions"
+          },
+          "days": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxPayments": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "VoidRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "WebhookConfigRequest": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "Bearer": {
+        "type": "http",
+        "description": "Staff token from POST /api/auth/login",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      },
+      "ApiKey": {
+        "type": "apiKey",
+        "description": "Merchant API key",
+        "name": "X-Api-Key",
+        "in": "header"
+      }
+    }
+  },
+  "security": [
+    {
+      "Bearer": []
+    },
+    {
+      "ApiKey": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Admin"
+    },
+    {
+      "name": "Analytics"
+    },
+    {
+      "name": "Auth"
+    },
+    {
+      "name": "Dead letters"
+    },
+    {
+      "name": "Fraud"
+    },
+    {
+      "name": "Ledger"
+    },
+    {
+      "name": "Live"
+    },
+    {
+      "name": "Merchants"
+    },
+    {
+      "name": "Operations"
+    },
+    {
+      "name": "Payments"
+    },
+    {
+      "name": "Payouts"
+    },
+    {
+      "name": "Reconciliation"
+    },
+    {
+      "name": "Refunds"
+    },
+    {
+      "name": "Webhooks"
+    }
+  ]
+}

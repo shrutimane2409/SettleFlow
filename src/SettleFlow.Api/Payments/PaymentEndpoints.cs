@@ -14,11 +14,13 @@ public static class PaymentEndpoints
         var group = app.MapGroup("/api/payments").WithTags("Payments").RequireAuthorization(Policies.PaymentsAccess);
 
         group.MapPost("", CreatePayment).RequireRateLimiting("payments").RequireAuthorization(Policies.PaymentsWrite)
-            .WithSummary("Create a payment (requires an Idempotency-Key header)");
-        group.MapGet("", ListPayments).WithSummary("List payments with filtering and pagination");
-        group.MapGet("{id:guid}", GetPayment);
+            .WithSummary("Create a payment (requires an Idempotency-Key header)")
+            .Produces<PaymentDto>(StatusCodes.Status202Accepted).ProducesValidationProblem();
+        group.MapGet("", ListPayments).WithSummary("List payments with filtering and pagination").Produces<PagedResult<PaymentDto>>();
+        group.MapGet("{id:guid}", GetPayment).Produces<PaymentDto>().Produces(StatusCodes.Status304NotModified).Produces(StatusCodes.Status404NotFound);
         group.MapGet("{id:guid}/timeline", GetTimeline).WithSummary("Everything that happened to the payment, in order");
-        group.MapPost("{id:guid}/review", ReviewPayment).RequireAuthorization(Policies.Reviewer).WithSummary("Approve or reject a payment held for manual review");
+        group.MapPost("{id:guid}/review", ReviewPayment).RequireAuthorization(Policies.Reviewer).WithSummary("Approve or reject a payment held for manual review")
+            .Produces<PaymentDto>().ProducesProblem(StatusCodes.Status409Conflict).ProducesProblem(StatusCodes.Status412PreconditionFailed);
 
         return app;
     }
@@ -169,7 +171,9 @@ public static class PaymentEndpoints
     {
         // Another merchant's payment is reported as 404, not 403, so ids can't be probed.
         var payment = await Visible(db, http).SingleOrDefaultAsync(x => x.Id == id, ct);
-        return payment is null ? Results.NotFound() : Results.Ok(PaymentDto.From(payment));
+        if (payment is null) return Results.NotFound();
+        Conditional.SetETag(http, payment);
+        return Conditional.NotModified(http, payment) ? Results.StatusCode(StatusCodes.Status304NotModified) : Results.Ok(PaymentDto.From(payment));
     }
 
     private static async Task<IResult> GetTimeline(Guid id, SettleFlowDbContext db, HttpContext http, CancellationToken ct)
@@ -195,6 +199,7 @@ public static class PaymentEndpoints
 
         var payment = await db.Payments.SingleOrDefaultAsync(x => x.Id == id, ct);
         if (payment is null) return Results.NotFound();
+        if (Conditional.CheckIfMatch(http, payment) is { } stale) return stale;
         if (payment.Status != PaymentStatus.FraudReview)
             return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "Not awaiting review",
                 detail: $"Payment is {payment.Status}; only FraudReview payments can be reviewed.");
@@ -241,6 +246,7 @@ public static class PaymentEndpoints
                 detail: "The payment changed while you were reviewing it. Reload and try again.");
         }
 
+        Conditional.SetETag(http, payment);
         return Results.Ok(PaymentDto.From(payment));
     }
 }

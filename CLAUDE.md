@@ -83,6 +83,13 @@ settlement.completed / payments.failed → notification workers → notification
 - `FraudSimulator` must use the same `FraudScorer` as the worker. Velocity is reconstructed in memory per customer.
 - Chargebacks post ledger type `chargeback` (Dr merchant amount + fee, Cr clearing amount, Cr fees fee) and notify via `NotificationTypes.ChargedBack` → `payment.charged_back`.
 
+### Contracts
+- Snapshot tests: `docs/events/*.schema.json` (unit tests) and `frontend/openapi.json` (integration test). Regenerate with `SETTLEFLOW_UPDATE_SNAPSHOTS=1`, then review the diff. When the `CI` env var is set, missing snapshots fail instead of being written.
+- Annotate new endpoints with `.Produces<T>()` so they appear in the contract. Response DTOs must be named `*Dto` (`RequiredValueTypesSchemaFilter` marks all their properties required).
+- `frontend/scripts/check-contract.mjs` compares `Payment`/`Refund` in `src/types.ts` against the schema. Add pairs there for new shared types.
+- Middleware that must stay public (Swagger) goes **before** `UseAuthorization`, because the fallback policy also applies to non-endpoint middleware that runs after it.
+- Payments carry a strong ETag (`Conditional`). New write endpoints on a payment should call `Conditional.CheckIfMatch` and set the new ETag after saving.
+
 ### Demo hooks (`SettlementOptions`)
 `merchant_outage` always throws (circuit opens, then the DLQ). `merchant_slow` exceeds the timeout. `blocked_*` merchants are declined, and only EUR/GBP/USD are supported. Random transient failures run at `TransientFailureRate` (set to 0 in the integration tests).
 

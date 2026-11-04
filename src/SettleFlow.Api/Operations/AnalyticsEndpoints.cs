@@ -14,8 +14,7 @@ public static class AnalyticsEndpoints
     public sealed record CountryRow(string Country, int Payments, int Approved, double AvgRisk);
     public sealed record ReasonRow(string Reason, int Count);
 
-    private static readonly string Approved = "'Settled','PartiallyRefunded','Refunded','ChargedBack','FraudApproved','Authorized','Voided','SettlementFailed'";
-
+    // "Approved" = passed fraud (whatever happened afterwards). Inlined as literal SQL below: no interpolation.
     public static IEndpointRouteBuilder MapAnalyticsEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/analytics", Analytics).WithTags("Analytics").RequireAuthorization(Policies.Staff)
@@ -30,10 +29,10 @@ public static class AnalyticsEndpoints
         days = Math.Clamp(days, 1, 365);
         var since = DateTimeOffset.UtcNow.AddDays(-days);
 
-        var daily = await db.Database.SqlQueryRaw<DayRow>($$"""
+        var daily = await db.Database.SqlQueryRaw<DayRow>("""
             SELECT date_trunc('day', "CreatedAt" AT TIME ZONE 'UTC') AS "Day",
                    count(*)::int AS "Payments",
-                   count(*) FILTER (WHERE "Status" IN ({{Approved}}))::int AS "Approved",
+                   count(*) FILTER (WHERE "Status" IN ('Settled','PartiallyRefunded','Refunded','ChargedBack','FraudApproved','Authorized','Voided','SettlementFailed'))::int AS "Approved",
                    count(*) FILTER (WHERE "Status" = 'FraudReview')::int AS "Review",
                    count(*) FILTER (WHERE "Status" = 'Declined')::int AS "Declined",
                    count(*) FILTER (WHERE "ChargebackAmount" > 0)::int AS "Chargebacks",
@@ -54,9 +53,9 @@ public static class AnalyticsEndpoints
             GROUP BY p."MerchantId" ORDER BY "SettledVolume" DESC LIMIT 20
             """, since).ToListAsync(ct);
 
-        var countries = await db.Database.SqlQueryRaw<CountryRow>($$"""
+        var countries = await db.Database.SqlQueryRaw<CountryRow>("""
             SELECT "Country", count(*)::int AS "Payments",
-                   count(*) FILTER (WHERE "Status" IN ({{Approved}}))::int AS "Approved",
+                   count(*) FILTER (WHERE "Status" IN ('Settled','PartiallyRefunded','Refunded','ChargedBack','FraudApproved','Authorized','Voided','SettlementFailed'))::int AS "Approved",
                    COALESCE(round(avg("RiskScore"), 1), 0)::float8 AS "AvgRisk"
             FROM "Payments" WHERE "CreatedAt" >= {0}
             GROUP BY "Country" ORDER BY "Payments" DESC LIMIT 20

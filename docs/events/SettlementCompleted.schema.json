@@ -1,0 +1,28 @@
+{
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "PaymentId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "Success": {
+      "type": "boolean"
+    },
+    "Reference": {
+      "type": "string"
+    },
+    "OccurredAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "PaymentId",
+    "Success",
+    "Reference",
+    "OccurredAt"
+  ]
+}

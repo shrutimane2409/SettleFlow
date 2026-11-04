@@ -14,11 +14,14 @@ public static class LifecycleEndpoints
     public static IEndpointRouteBuilder MapLifecycleEndpoints(this IEndpointRouteBuilder app)
     {
         var payments = app.MapGroup("/api/payments/{id:guid}").WithTags("Payments").RequireAuthorization(Policies.PaymentsWrite);
-        payments.MapPost("capture", Capture).WithSummary("Capture an authorized (manual-capture) payment, fully or partially");
-        payments.MapPost("void", Void).WithSummary("Release an authorization without capturing it");
-        payments.MapPost("refunds", CreateRefund).WithSummary("Refund a settled payment, fully or partially (requires Idempotency-Key)");
-        app.MapGet("/api/payments/{id:guid}/refunds", ListPaymentRefunds).WithTags("Payments").RequireAuthorization(Policies.PaymentsAccess);
-        app.MapGet("/api/refunds", ListRefunds).WithTags("Refunds").RequireAuthorization(Policies.PaymentsAccess);
+        payments.MapPost("capture", Capture).WithSummary("Capture an authorized (manual-capture) payment, fully or partially")
+            .Produces<PaymentDto>(StatusCodes.Status202Accepted).ProducesProblem(StatusCodes.Status409Conflict);
+        payments.MapPost("void", Void).WithSummary("Release an authorization without capturing it").Produces<PaymentDto>();
+        payments.MapPost("refunds", CreateRefund).WithSummary("Refund a settled payment, fully or partially (requires Idempotency-Key)")
+            .Produces<RefundDto>(StatusCodes.Status202Accepted).ProducesProblem(StatusCodes.Status409Conflict);
+        app.MapGet("/api/payments/{id:guid}/refunds", ListPaymentRefunds).WithTags("Payments").RequireAuthorization(Policies.PaymentsAccess)
+            .Produces<List<RefundDto>>();
+        app.MapGet("/api/refunds", ListRefunds).WithTags("Refunds").RequireAuthorization(Policies.PaymentsAccess).Produces<List<RefundDto>>();
 
         var hooks = app.MapGroup("/api").WithTags("Webhooks");
         hooks.MapPut("merchants/{merchantId}/webhook", (string merchantId, WebhookConfigRequest r, HttpContext ctx, SettleFlowDbContext db, WebhookSecrets s, IOptions<WebhookOptions> o, CancellationToken ct)
@@ -44,6 +47,7 @@ public static class LifecycleEndpoints
     {
         var p = await PaymentEndpoints.Visible(db, http, tracking: true).SingleOrDefaultAsync(x => x.Id == id, ct);
         if (p is null) return Results.NotFound();
+        if (Conditional.CheckIfMatch(http, p) is { } stale) return stale;
         if (p.Status != PaymentStatus.Authorized)
             return Conflict("Not capturable", $"Payment is {p.Status}; only Authorized payments can be captured.");
 
@@ -59,13 +63,16 @@ public static class LifecycleEndpoints
         db.RecordTimeline(p.Id, "CaptureRequested", "api", $"{p.Currency} {amount:0.00} of {p.Amount:0.00} by {actor.Name}");
         db.Audit(actor.Name, actor.Type, "payment.capture_requested", "payment", p.Id.ToString(), new { amount }, actor.Ip);
 
-        return await SaveOr409(db, ct) ?? Results.Accepted($"/api/payments/{p.Id}", PaymentDto.From(p));
+        if (await SaveOr409(db, ct) is { } conflict) return conflict;
+        Conditional.SetETag(http, p);
+        return Results.Accepted($"/api/payments/{p.Id}", PaymentDto.From(p));
     }
 
     private static async Task<IResult> Void(Guid id, VoidRequest? request, HttpContext http, SettleFlowDbContext db, CancellationToken ct)
     {
         var p = await PaymentEndpoints.Visible(db, http, tracking: true).SingleOrDefaultAsync(x => x.Id == id, ct);
         if (p is null) return Results.NotFound();
+        if (Conditional.CheckIfMatch(http, p) is { } stale) return stale;
         if (p.Status != PaymentStatus.Authorized)
             return Conflict("Not voidable", $"Payment is {p.Status}; only Authorized payments can be voided.");
 
@@ -79,7 +86,9 @@ public static class LifecycleEndpoints
         db.RecordTimeline(p.Id, "Voided", "api", $"{reason} (by {actor.Name})");
         db.Audit(actor.Name, actor.Type, "payment.voided", "payment", p.Id.ToString(), new { reason }, actor.Ip);
 
-        return await SaveOr409(db, ct) ?? Results.Ok(PaymentDto.From(p));
+        if (await SaveOr409(db, ct) is { } conflict) return conflict;
+        Conditional.SetETag(http, p);
+        return Results.Ok(PaymentDto.From(p));
     }
 
     private static async Task<IResult> CreateRefund(Guid id, RefundRequest? request, HttpContext http, SettleFlowDbContext db, CancellationToken ct)
@@ -91,6 +100,7 @@ public static class LifecycleEndpoints
 
         var p = await PaymentEndpoints.Visible(db, http, tracking: true).SingleOrDefaultAsync(x => x.Id == id, ct);
         if (p is null) return Results.NotFound();
+        if (Conditional.CheckIfMatch(http, p) is { } stale) return stale;
 
         // Same key for the same payment → same refund (safe client retries).
         var existing = await db.Refunds.AsNoTracking().SingleOrDefaultAsync(r => r.PaymentId == id && r.IdempotencyKey == key, ct);

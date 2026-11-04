@@ -20,6 +20,8 @@ builder.Services.AddSingleton<PaymentChangeFeed>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<PaymentChangeFeed>());
 
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+// Swagger reads MVC's JSON options for schemas: keep enums as strings there too, so the contract matches the wire.
+builder.Services.Configure<Microsoft.AspNetCore.Mvc.JsonOptions>(o => o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 // Errors carry the trace id so a user-reported error can be found in logs/traces.
 builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = ctx =>
     ctx.ProblemDetails.Extensions["traceId"] = System.Diagnostics.Activity.Current?.TraceId.ToString());
@@ -32,7 +34,7 @@ builder.Services.AddCors(o => o.AddPolicy("Frontend", p => p
     .WithOrigins(corsOrigins)
     .AllowAnyHeader()
     .AllowAnyMethod()
-    .WithExposedHeaders("Location", "Idempotent-Replayed", "X-Correlation-Id")));
+    .WithExposedHeaders("Location", "Idempotent-Replayed", "X-Correlation-Id", "ETag")));
 
 // Rate limits: payment creation per caller (merchant / user, falling back to IP), login attempts per IP.
 var permitLimit = builder.Configuration.GetValue("RateLimiting:PaymentsPerWindow", 60);
@@ -53,6 +55,10 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(o =>
 {
     o.OperationFilter<IdempotencyKeyOperationFilter>();
+    // Nullable reference types drive "required" / "nullable" in the schema, so generated clients get exact types.
+    o.SupportNonNullableReferenceTypes();
+    o.NonNullableReferenceTypesAsRequired();
+    o.SchemaFilter<RequiredValueTypesSchemaFilter>();
     o.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Type = SecuritySchemeType.Http, Scheme = "bearer", BearerFormat = "JWT",
@@ -81,12 +87,15 @@ app.Use((ctx, next) =>
 });
 app.UseSerilogRequestLoggingIfEnabled();
 app.UseCors("Frontend");
+
+// API docs are public, so they must come before UseAuthorization: the deny-by-default fallback
+// policy also applies to middleware that runs after it.
+app.UseSwagger();
+app.UseSwaggerUI();
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
-
-app.UseSwagger();
-app.UseSwaggerUI();
 
 app.MapSettleFlowDefaults();
 app.MapSecurityEndpoints();

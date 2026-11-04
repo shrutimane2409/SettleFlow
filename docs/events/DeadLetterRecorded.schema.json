@@ -1,0 +1,43 @@
+{
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "DeadLetterId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "Consumer": {
+      "type": "string"
+    },
+    "SourceTopic": {
+      "type": "string"
+    },
+    "Key": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "Error": {
+      "type": "string"
+    },
+    "Attempts": {
+      "type": "integer"
+    },
+    "OccurredAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "DeadLetterId",
+    "Consumer",
+    "SourceTopic",
+    "Key",
+    "Error",
+    "Attempts",
+    "OccurredAt"
+  ]
+}

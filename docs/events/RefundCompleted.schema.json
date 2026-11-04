@@ -1,0 +1,47 @@
+{
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "RefundId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "PaymentId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "Success": {
+      "type": "boolean"
+    },
+    "Amount": {
+      "type": "number"
+    },
+    "Reference": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "FailureReason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "OccurredAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "RefundId",
+    "PaymentId",
+    "Success",
+    "Amount",
+    "Reference",
+    "FailureReason",
+    "OccurredAt"
+  ]
+}

@@ -33,6 +33,12 @@ public abstract class PaymentEventWorker<T>(
 
     protected virtual string ConsumerName => GetType().Name;
 
+    /// <summary>
+    /// Highest envelope version this handler understands. Newer events (e.g. from a producer deployed ahead of
+    /// this consumer) are dead-lettered rather than half-understood; replay them once this consumer is upgraded.
+    /// </summary>
+    protected virtual int MaxSupportedVersion => 1;
+
     protected abstract Task HandleAsync(EventEnvelope<T> envelope, SettleFlowDbContext db, CancellationToken ct);
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
@@ -203,6 +209,13 @@ public abstract class PaymentEventWorker<T>(
         }
 
         activity?.SetTag("messaging.message.id", envelope.EventId);
+
+        if (envelope.Version > MaxSupportedVersion)
+        {
+            await DeadLetterAsync(result, new NotSupportedException(
+                $"{envelope.EventType} v{envelope.Version} is newer than {ConsumerName} supports (v{MaxSupportedVersion})"), 1, ct, eventId);
+            return;
+        }
         using var logScope = logger.BeginScope(new Dictionary<string, object> { ["EventId"] = envelope.EventId, ["Consumer"] = ConsumerName });
 
         var attempts = 0;
