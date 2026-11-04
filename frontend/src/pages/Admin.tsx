@@ -65,15 +65,23 @@ export function Merchants() {
       {secret && <SecretBanner secret={secret} onDone={() => setSecret(null)} />}
 
       <div className="table admin-table">
-        <div className="tr th"><span>Merchant</span><span>Name</span><span>API key</span><span>Webhook</span><span>Status</span><span /></div>
+        <div className="tr th"><span>Merchant</span><span>Name</span><span>API key</span><span>Webhook</span><span>Fee</span><span>Status</span><span /></div>
         {(data ?? []).map(m => (
           <div className="tr" key={m.id}>
             <span className="mono">{m.id}</span>
             <span className="ellipsis">{m.name}</span>
             <span className="mono muted-text" title={`issued ${timeAgo(m.keyRotatedAt ?? m.createdAt)}`}>{m.apiKeyPrefix}…</span>
             <span className="ellipsis muted-text" title={m.webhookUrl ?? ''}>{m.webhookUrl ?? 'off'}</span>
+            <span className="muted-text">{(m.feeBps / 100).toFixed(2)}% + {m.feeFixed.toFixed(2)}</span>
             <span><em className={`badge ${m.disabled ? 'declined' : 'settled'}`}>{m.disabled ? 'Disabled' : 'Active'}</em></span>
             <span className="row-actions">
+              <button disabled={busy} title="Set processing fee" onClick={() => run(async () => {
+                const v = window.prompt(`Fee for ${m.id} as "percent fixed", e.g. "1.5 0.25"`, `${m.feeBps / 100} ${m.feeFixed}`);
+                if (!v) return;
+                const [pct, fixed] = v.trim().split(/\s+/).map(Number);
+                await api.setFees(m.id, Math.round(pct * 100), fixed ?? 0);
+                await refresh();
+              })}>Fee</button>
               <button disabled={busy} title="Set the webhook URL" onClick={() => setWebhook(m.id, m.webhookUrl)}><Webhook size={13} /> Webhook</button>
               <button disabled={busy} title="Issue a new key; the old one stops working immediately"
                 onClick={() => run(async () => { setSecret(await api.rotateMerchantKey(m.id)); await refresh(); })}>

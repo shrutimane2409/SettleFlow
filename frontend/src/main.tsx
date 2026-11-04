@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Activity, CreditCard, FileClock, Inbox, LogOut, RefreshCw, ShieldAlert, Store, Users as UsersIcon, Webhook } from 'lucide-react';
+import { Activity, BookOpen, CreditCard, FileClock, Inbox, Landmark, LogOut, RefreshCw, Scale, ShieldAlert, Store, Users as UsersIcon, Webhook } from 'lucide-react';
 import { api } from './api/client';
 import { can, session, useSession } from './auth';
 import { PaymentDrawer } from './components/PaymentDrawer';
 import { useHashRoute, usePolling } from './hooks';
 import { AuditLog, Merchants, Users } from './pages/Admin';
 import { DeadLetters } from './pages/DeadLetters';
+import { Ledger, Payouts, Reconciliation } from './pages/Finance';
 import { Login } from './pages/Login';
 import { Overview } from './pages/Overview';
 import { Payments } from './pages/Payments';
@@ -18,6 +19,9 @@ const NAV = [
   { route: 'payments', label: 'Payments', icon: CreditCard, title: 'Payments', subtitle: 'Search and inspect every payment' },
   { route: 'review', label: 'Review queue', icon: ShieldAlert, title: 'Review queue', subtitle: 'Payments the risk engine wants a human to decide' },
   { route: 'dlq', label: 'Dead letters', icon: Inbox, title: 'Dead letters', subtitle: 'Failed messages, ready to replay' },
+  { route: 'ledger', label: 'Ledger', icon: BookOpen, title: 'Ledger', subtitle: 'Double-entry books: every movement of money' },
+  { route: 'payouts', label: 'Payouts', icon: Landmark, title: 'Payouts', subtitle: 'Settlement batches paid to merchants' },
+  { route: 'reconciliation', label: 'Reconciliation', icon: Scale, title: 'Reconciliation', subtitle: 'SettleFlow vs acquirer vs ledger' },
   { route: 'webhooks', label: 'Webhooks', icon: Webhook, title: 'Webhooks', subtitle: 'Signed event deliveries to merchants' },
   { route: 'merchants', label: 'Merchants', icon: Store, title: 'Merchants', subtitle: 'Accounts and API keys', admin: true },
   { route: 'users', label: 'Users', icon: UsersIcon, title: 'Users', subtitle: 'Who can sign in, and what they can do', admin: true },
@@ -90,6 +94,9 @@ function App() {
         {current.route === 'review' && <Payments onSelect={setSelected} tick={tick} fixedStatus="FraudReview" title="Awaiting manual review" />}
         {current.route === 'dlq' && <DeadLetters onSelect={setSelected} />}
         {current.route === 'webhooks' && <Webhooks onSelect={setSelected} />}
+        {current.route === 'ledger' && <Ledger onSelect={setSelected} />}
+        {current.route === 'payouts' && <Payouts onSelect={setSelected} />}
+        {current.route === 'reconciliation' && <Reconciliation onSelect={setSelected} />}
         {current.route === 'merchants' && <Merchants />}
         {current.route === 'users' && <Users />}
         {current.route === 'audit' && <AuditLog onSelect={setSelected} />}

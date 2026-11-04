@@ -230,3 +230,18 @@ select { font: inherit; font-size: 13px; display: block; width: 100%; margin-top
 .mini-row { display: grid; grid-template-columns: 1fr auto 1.4fr 1fr; gap: 10px; align-items: center; font-size: 12px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
 .hooks-table .tr { grid-template-columns: 1.2fr 1fr .8fr .5fr 1.2fr .7fr 1.3fr; }
 .pills { margin: 4px 0 12px; }
+
+/* ---------- finance ---------- */
+.finance-grid { grid-template-columns: 1fr 1fr; }
+.good-text { color: var(--good); display: inline-flex; align-items: center; gap: 4px; }
+.tr.selected { background: #152036; }
+.ledger-table .tr { grid-template-columns: 2.2fr 1.6fr .6fr 1fr; }
+.entries-table .tr { grid-template-columns: .8fr 1fr 2fr 1fr; }
+.tr.trial { grid-template-columns: .6fr 1fr 1fr .8fr; }
+.payouts-table .tr { grid-template-columns: 1.5fr 1.2fr .6fr 1fr .8fr 1fr .8fr; }
+.recon-table .tr { grid-template-columns: 1fr 1fr .7fr 1fr .9fr; }
+.section-h { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin: 18px 0 10px; }
+button.mini-row { background: none; color: inherit; text-align: left; width: 100%; }
+.dlq-item.resolved { opacity: .6; background: rgba(18, 26, 40, .4); border-color: var(--line); }
+.empty svg { vertical-align: -3px; color: var(--good); }
+@media (max-width: 1300px) { .finance-grid { grid-template-columns: 1fr; } }

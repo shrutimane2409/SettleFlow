@@ -14,6 +14,7 @@ builder.AddSettleFlowDefaults("api");
 builder.AddSettleFlowAuth();
 builder.Services.AddWebhookSecrets(builder.Configuration);
 builder.Services.AddRetention(builder.Configuration);
+builder.Services.AddFinance(builder.Configuration);
 
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddProblemDetails();
@@ -81,6 +82,7 @@ app.MapSecurityEndpoints();
 app.MapPaymentEndpoints();
 app.MapLifecycleEndpoints();
 app.MapOperationsEndpoints();
+app.MapFinanceEndpoints();
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription().AllowAnonymous();
 
 await app.InitializeSettleFlowAsync();

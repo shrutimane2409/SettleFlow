@@ -33,6 +33,22 @@ public enum RefundStatus { Pending, Succeeded, Failed }
 
 public enum WebhookDeliveryStatus { Pending, Delivered, Failed }
 
+public enum PayoutStatus { Paid, Failed }
+
+public enum ReconciliationItemKind
+{
+    /// <summary>Both sides have it, but the amounts differ.</summary>
+    AmountMismatch,
+    /// <summary>SettleFlow settled/refunded it, the acquirer has no successful record.</summary>
+    MissingAtAcquirer,
+    /// <summary>The acquirer has a successful record SettleFlow doesn't (e.g. charged but our commit failed).</summary>
+    MissingInSettleFlow,
+    /// <summary>A settled payment or refund without its ledger transaction.</summary>
+    MissingLedgerPosting,
+    /// <summary>The ledger's trial balance is not zero for a currency.</summary>
+    LedgerImbalance
+}
+
 public sealed class Payment
 {
     public Guid Id { get; set; }
@@ -59,6 +75,12 @@ public sealed class Payment
     public DateTimeOffset? AuthorizedAt { get; set; }
     public DateTimeOffset? SettledAt { get; set; }
     public DateTimeOffset? VoidedAt { get; set; }
+
+    /// <summary>Processing fee charged at settlement (credited to platform revenue).</summary>
+    public decimal? FeeAmount { get; set; }
+
+    /// <summary>The payout that paid this payment out to the merchant.</summary>
+    public Guid? PayoutId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
@@ -131,6 +153,57 @@ public sealed class Refund
     public string CreatedBy { get; set; } = "";
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
+    public Guid? PayoutId { get; set; }
+}
+
+/// <summary>A settlement batch: what a merchant was paid for a set of payments and refunds.</summary>
+public sealed class Payout
+{
+    public Guid Id { get; set; }
+    public string MerchantId { get; set; } = "";
+    public string Currency { get; set; } = "";
+    public decimal GrossAmount { get; set; }
+    public decimal FeeAmount { get; set; }
+    public decimal RefundAmount { get; set; }
+    public decimal NetAmount { get; set; }
+    public int PaymentCount { get; set; }
+    public int RefundCount { get; set; }
+    public PayoutStatus Status { get; set; }
+    public string Reference { get; set; } = "";
+    public DateTimeOffset PeriodEnd { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? PaidAt { get; set; }
+}
+
+public sealed class ReconciliationRun
+{
+    public Guid Id { get; set; }
+    public DateTimeOffset PeriodStart { get; set; }
+    public DateTimeOffset PeriodEnd { get; set; }
+    public DateTimeOffset StartedAt { get; set; }
+    public DateTimeOffset? CompletedAt { get; set; }
+    public string TriggeredBy { get; set; } = "";
+    public int Matched { get; set; }
+    public int Discrepancies { get; set; }
+    public bool LedgerBalanced { get; set; }
+    public List<ReconciliationItem> Items { get; set; } = [];
+}
+
+public sealed class ReconciliationItem
+{
+    public Guid Id { get; set; }
+    public Guid RunId { get; set; }
+    public ReconciliationItemKind Kind { get; set; }
+    public string Operation { get; set; } = "";
+    public Guid? Reference { get; set; }
+    public string? MerchantId { get; set; }
+    public string Currency { get; set; } = "";
+    public decimal? SettleFlowAmount { get; set; }
+    public decimal? AcquirerAmount { get; set; }
+    public string Details { get; set; } = "";
+    public DateTimeOffset? ResolvedAt { get; set; }
+    public string? ResolvedBy { get; set; }
+    public string? ResolutionNote { get; set; }
 }
 
 /// <summary>One attempt-tracked delivery of an event to a merchant's webhook endpoint.</summary>
@@ -201,6 +274,12 @@ public sealed class SettleFlowDbContext(DbContextOptions<SettleFlowDbContext> op
     public DbSet<Refund> Refunds => Set<Refund>();
     public DbSet<WebhookDelivery> WebhookDeliveries => Set<WebhookDelivery>();
     public DbSet<AcquirerTransaction> AcquirerTransactions => Set<AcquirerTransaction>();
+    public DbSet<LedgerAccount> LedgerAccounts => Set<LedgerAccount>();
+    public DbSet<LedgerTransaction> LedgerTransactions => Set<LedgerTransaction>();
+    public DbSet<LedgerEntry> LedgerEntries => Set<LedgerEntry>();
+    public DbSet<Payout> Payouts => Set<Payout>();
+    public DbSet<ReconciliationRun> ReconciliationRuns => Set<ReconciliationRun>();
+    public DbSet<ReconciliationItem> ReconciliationItems => Set<ReconciliationItem>();
 
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
@@ -228,7 +307,11 @@ public sealed class SettleFlowDbContext(DbContextOptions<SettleFlowDbContext> op
             e.Property(x => x.CaptureMode).HasMaxLength(16);
             e.Property(x => x.CapturedAmount).HasPrecision(18, 2);
             e.Property(x => x.RefundedAmount).HasPrecision(18, 2);
+            e.Property(x => x.FeeAmount).HasPrecision(18, 2);
             e.HasIndex(x => new { x.Status, x.AuthorizedAt });
+            e.HasIndex(x => new { x.MerchantId, x.Currency, x.SettledAt }).HasFilter("\"PayoutId\" IS NULL AND \"SettledAt\" IS NOT NULL");
+            e.HasIndex(x => x.SettledAt);
+            e.HasIndex(x => x.PayoutId);
             e.Ignore(x => x.RiskReasons);
             e.HasIndex(x => new { x.Status, x.CreatedAt });
             e.HasIndex(x => new { x.CustomerId, x.CreatedAt });
@@ -265,6 +348,8 @@ public sealed class SettleFlowDbContext(DbContextOptions<SettleFlowDbContext> op
 
         b.Entity<Merchant>(e =>
         {
+            e.Property(x => x.FeeFixed).HasPrecision(18, 2).HasDefaultValue(0.25m);
+            e.Property(x => x.FeeBps).HasDefaultValue(150);
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasMaxLength(64);
             e.Property(x => x.Name).HasMaxLength(128);
@@ -294,6 +379,59 @@ public sealed class SettleFlowDbContext(DbContextOptions<SettleFlowDbContext> op
             e.Property(x => x.IdempotencyKey).HasMaxLength(128);
             e.HasIndex(x => new { x.PaymentId, x.IdempotencyKey }).IsUnique();
             e.HasIndex(x => new { x.MerchantId, x.CreatedAt });
+            e.HasIndex(x => x.CompletedAt);
+            e.HasIndex(x => x.PayoutId);
+        });
+
+        b.Entity<LedgerAccount>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasMaxLength(160);
+            e.Property(x => x.Kind).HasMaxLength(32);
+            e.Property(x => x.Currency).HasMaxLength(3);
+        });
+
+        b.Entity<LedgerTransaction>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Type).HasMaxLength(32);
+            e.HasIndex(x => new { x.Type, x.Reference }).IsUnique();
+            e.HasIndex(x => x.OccurredAt);
+            e.HasMany(x => x.Entries).WithOne().HasForeignKey(x => x.TransactionId);
+        });
+
+        b.Entity<LedgerEntry>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Amount).HasPrecision(18, 2);
+            e.HasOne<LedgerAccount>().WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => x.AccountId);
+        });
+
+        b.Entity<Payout>(e =>
+        {
+            e.HasKey(x => x.Id);
+            foreach (var p in new[] { nameof(Payout.GrossAmount), nameof(Payout.FeeAmount), nameof(Payout.RefundAmount), nameof(Payout.NetAmount) })
+                e.Property(p).HasPrecision(18, 2);
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
+            e.HasIndex(x => new { x.MerchantId, x.CreatedAt });
+            e.HasIndex(x => x.Reference).IsUnique();
+        });
+
+        b.Entity<ReconciliationRun>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.StartedAt);
+            e.HasMany(x => x.Items).WithOne().HasForeignKey(x => x.RunId);
+        });
+
+        b.Entity<ReconciliationItem>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(32);
+            e.Property(x => x.SettleFlowAmount).HasPrecision(18, 2);
+            e.Property(x => x.AcquirerAmount).HasPrecision(18, 2);
+            e.HasIndex(x => new { x.RunId, x.Kind });
         });
 
         b.Entity<WebhookDelivery>(e =>

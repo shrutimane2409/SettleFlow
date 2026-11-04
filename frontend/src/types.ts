@@ -49,6 +49,8 @@ export interface Payment {
   authorizedAt: string | null;
   settledAt: string | null;
   voidedAt: string | null;
+  feeAmount: number | null;
+  payoutId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -147,6 +149,81 @@ export interface Merchant {
   createdAt: string;
   keyRotatedAt: string | null;
   webhookUrl: string | null;
+  feeBps: number;
+  feeFixed: number;
+}
+
+export interface LedgerAccount {
+  id: string;
+  kind: 'acquirer_clearing' | 'merchant_balance' | 'platform_fees';
+  owner: string;
+  currency: string;
+  balance: number;
+  debitMinusCredit: number;
+  entries: number;
+}
+
+export interface LedgerEntryRow {
+  id: number;
+  amount: number;
+  type: string;
+  reference: string;
+  description: string;
+  occurredAt: string;
+}
+
+export interface TrialBalance {
+  balanced: boolean;
+  currencies: { currency: string; debits: number; credits: number; net: number; balanced: boolean }[];
+}
+
+export interface Payout {
+  id: string;
+  merchantId: string;
+  currency: string;
+  grossAmount: number;
+  feeAmount: number;
+  refundAmount: number;
+  netAmount: number;
+  paymentCount: number;
+  refundCount: number;
+  status: 'Paid' | 'Failed';
+  reference: string;
+  createdAt: string;
+  paidAt: string | null;
+}
+
+export interface PayoutDetail {
+  payout: Payout;
+  payments: { id: string; customerId: string; captured: number; fee: number; settlementReference: string; settledAt: string }[];
+  refunds: { id: string; paymentId: string; amount: number; acquirerReference: string; completedAt: string }[];
+}
+
+export interface ReconRun {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  startedAt: string;
+  triggeredBy: string;
+  matched: number;
+  discrepancies: number;
+  unresolved: number;
+  ledgerBalanced: boolean;
+}
+
+export interface ReconItem {
+  id: string;
+  kind: 'AmountMismatch' | 'MissingAtAcquirer' | 'MissingInSettleFlow' | 'MissingLedgerPosting' | 'LedgerImbalance';
+  operation: string;
+  reference: string | null;
+  merchantId: string | null;
+  currency: string;
+  settleFlowAmount: number | null;
+  acquirerAmount: number | null;
+  details: string;
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+  resolutionNote: string | null;
 }
 
 export interface User {

@@ -48,6 +48,8 @@ public sealed record PaymentDto(
     decimal? CapturedAmount,
     decimal RefundedAmount,
     decimal RefundableAmount,
+    decimal? FeeAmount,
+    Guid? PayoutId,
     DateTimeOffset? AuthorizedAt,
     DateTimeOffset? SettledAt,
     DateTimeOffset? VoidedAt,
@@ -57,7 +59,7 @@ public sealed record PaymentDto(
     public static PaymentDto From(Payment p) => new(
         p.Id, p.Amount, p.Currency, p.CustomerId, p.MerchantId, p.Country, p.Status, p.RiskScore,
         p.RiskReasons, p.SettlementReference, p.FailureReason, p.ReviewedBy, p.ReviewNote,
-        p.CaptureMode, p.CapturedAmount, p.RefundedAmount, Refundable(p),
+        p.CaptureMode, p.CapturedAmount, p.RefundedAmount, Refundable(p), p.FeeAmount, p.PayoutId,
         p.AuthorizedAt, p.SettledAt, p.VoidedAt, p.CreatedAt, p.UpdatedAt);
 
     public static decimal Refundable(Payment p) =>

@@ -270,6 +270,97 @@ namespace SettleFlow.Infrastructure.Migrations
                     b.ToTable("Inbox");
                 });
 
+            modelBuilder.Entity("SettleFlow.Infrastructure.LedgerAccount", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Owner")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("LedgerAccounts");
+                });
+
+            modelBuilder.Entity("SettleFlow.Infrastructure.LedgerEntry", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("AccountId")
+                        .IsRequired()
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("TransactionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId");
+
+                    b.HasIndex("TransactionId");
+
+                    b.ToTable("LedgerEntries");
+                });
+
+            modelBuilder.Entity("SettleFlow.Infrastructure.LedgerTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("Reference")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OccurredAt");
+
+                    b.HasIndex("Type", "Reference")
+                        .IsUnique();
+
+                    b.ToTable("LedgerTransactions");
+                });
+
             modelBuilder.Entity("SettleFlow.Infrastructure.Merchant", b =>
                 {
                     b.Property<string>("Id")
@@ -289,6 +380,17 @@ namespace SettleFlow.Infrastructure.Migrations
 
                     b.Property<bool>("Disabled")
                         .HasColumnType("boolean");
+
+                    b.Property<int>("FeeBps")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(150);
+
+                    b.Property<decimal>("FeeFixed")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasDefaultValue(0.25m);
 
                     b.Property<DateTimeOffset?>("KeyRotatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -442,10 +544,17 @@ namespace SettleFlow.Infrastructure.Migrations
                     b.Property<string>("FailureReason")
                         .HasColumnType("text");
 
+                    b.Property<decimal?>("FeeAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<string>("MerchantId")
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<Guid?>("PayoutId")
+                        .HasColumnType("uuid");
 
                     b.Property<decimal>("RefundedAmount")
                         .HasPrecision(18, 2)
@@ -490,11 +599,18 @@ namespace SettleFlow.Infrastructure.Migrations
 
                     b.HasIndex("CreatedAt");
 
+                    b.HasIndex("PayoutId");
+
+                    b.HasIndex("SettledAt");
+
                     b.HasIndex("CustomerId", "CreatedAt");
 
                     b.HasIndex("Status", "AuthorizedAt");
 
                     b.HasIndex("Status", "CreatedAt");
+
+                    b.HasIndex("MerchantId", "Currency", "SettledAt")
+                        .HasFilter("\"PayoutId\" IS NULL AND \"SettledAt\" IS NOT NULL");
 
                     b.ToTable("Payments");
                 });
@@ -529,6 +645,164 @@ namespace SettleFlow.Infrastructure.Migrations
                     b.HasIndex("PaymentId", "Id");
 
                     b.ToTable("PaymentEvents");
+                });
+
+            modelBuilder.Entity("SettleFlow.Infrastructure.Payout", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("FeeAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("GrossAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("MerchantId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("NetAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTimeOffset?>("PaidAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("PaymentCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("PeriodEnd")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("RefundAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("RefundCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Reference")
+                        .IsUnique();
+
+                    b.HasIndex("MerchantId", "CreatedAt");
+
+                    b.ToTable("Payouts");
+                });
+
+            modelBuilder.Entity("SettleFlow.Infrastructure.ReconciliationItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("AcquirerAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Details")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("MerchantId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Operation")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("Reference")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResolutionNote")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ResolvedBy")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("SettleFlowAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RunId", "Kind");
+
+                    b.ToTable("ReconciliationItems");
+                });
+
+            modelBuilder.Entity("SettleFlow.Infrastructure.ReconciliationRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Discrepancies")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("LedgerBalanced")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Matched")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("PeriodEnd")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("PeriodStart")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TriggeredBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StartedAt");
+
+                    b.ToTable("ReconciliationRuns");
                 });
 
             modelBuilder.Entity("SettleFlow.Infrastructure.Refund", b =>
@@ -573,6 +847,9 @@ namespace SettleFlow.Infrastructure.Migrations
                     b.Property<Guid>("PaymentId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("PayoutId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Reason")
                         .HasColumnType("text");
 
@@ -582,6 +859,10 @@ namespace SettleFlow.Infrastructure.Migrations
                         .HasColumnType("character varying(16)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CompletedAt");
+
+                    b.HasIndex("PayoutId");
 
                     b.HasIndex("MerchantId", "CreatedAt");
 
@@ -648,6 +929,40 @@ namespace SettleFlow.Infrastructure.Migrations
                     b.HasIndex("MerchantId", "CreatedAt");
 
                     b.ToTable("WebhookDeliveries");
+                });
+
+            modelBuilder.Entity("SettleFlow.Infrastructure.LedgerEntry", b =>
+                {
+                    b.HasOne("SettleFlow.Infrastructure.LedgerAccount", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SettleFlow.Infrastructure.LedgerTransaction", null)
+                        .WithMany("Entries")
+                        .HasForeignKey("TransactionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("SettleFlow.Infrastructure.ReconciliationItem", b =>
+                {
+                    b.HasOne("SettleFlow.Infrastructure.ReconciliationRun", null)
+                        .WithMany("Items")
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("SettleFlow.Infrastructure.LedgerTransaction", b =>
+                {
+                    b.Navigation("Entries");
+                });
+
+            modelBuilder.Entity("SettleFlow.Infrastructure.ReconciliationRun", b =>
+                {
+                    b.Navigation("Items");
                 });
 #pragma warning restore 612, 618
         }

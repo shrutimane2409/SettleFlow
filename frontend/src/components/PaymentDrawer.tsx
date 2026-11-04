@@ -120,6 +120,8 @@ export function PaymentDrawer({ id, onClose, onChanged }: { id: string; onClose:
               <dt>Country</dt><dd>{payment.country}</dd>
               <dt>Capture</dt><dd>{payment.captureMode}</dd>
               {payment.capturedAmount != null && (<><dt>Captured</dt><dd>{formatMoney(payment.capturedAmount, payment.currency)}</dd></>)}
+              {payment.feeAmount != null && (<><dt>Fee</dt><dd>{formatMoney(payment.feeAmount, payment.currency)}</dd></>)}
+              {payment.payoutId && (<><dt>Paid out</dt><dd className="mono small">{payment.payoutId.slice(0, 8)}…</dd></>)}
               {payment.refundedAmount > 0 && (<><dt>Refunded</dt><dd>{formatMoney(payment.refundedAmount, payment.currency)}</dd></>)}
               <dt>Risk</dt><dd><RiskMeter score={payment.riskScore} /></dd>
               {payment.riskReasons.length > 0 && (<><dt>Signals</dt><dd>{payment.riskReasons.map(r => <span key={r} className="chip">{r}</span>)}</dd></>)}

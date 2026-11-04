@@ -51,6 +51,10 @@ public sealed class Merchant
 
     /// <summary>HMAC signing secret, encrypted at rest with ASP.NET Data Protection.</summary>
     public string? WebhookSecretProtected { get; set; }
+
+    /// <summary>Processing fee in basis points (150 = 1.5%) plus a fixed amount per payment.</summary>
+    public int FeeBps { get; set; } = 150;
+    public decimal FeeFixed { get; set; } = 0.25m;
 }
 
 /// <summary>Append-only record of every human / merchant action. A database trigger rejects UPDATE, DELETE and TRUNCATE.</summary>

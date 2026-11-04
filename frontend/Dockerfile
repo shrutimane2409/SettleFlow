@@ -12,7 +12,10 @@ ENV VITE_HIDE_DEMO_LOGINS=$VITE_HIDE_DEMO_LOGINS
 RUN npm run build
 
 FROM nginx:alpine
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# The official image renders /etc/nginx/templates/*.template with envsubst at startup.
+ENV NGINX_RESOLVER=127.0.0.11 \
+    API_UPSTREAM=http://api:8080
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

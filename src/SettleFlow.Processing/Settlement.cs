@@ -31,6 +31,9 @@ public sealed class SettlementOptions
 
     /// <summary>This merchant's acquirer answers too slowly: calls hit the timeout and trip the circuit breaker.</summary>
     public string SlowMerchantId { get; set; } = "merchant_slow";
+
+    /// <summary>Demo only: probability that the acquirer records a capture 0.01 off, so reconciliation has something to find.</summary>
+    public double AmountDiscrepancyRate { get; set; }
     public int SlowLatencyMs { get; set; } = 5000;
 
     // ---- resilience ----
@@ -112,7 +115,9 @@ public sealed class SimulatedSettlementGateway(IOptions<SettlementOptions> optio
             Operation = operation,
             Reference = reference,
             MerchantId = merchantId,
-            Amount = amount,
+            Amount = outcome.Success && operation == AcquirerOperations.Capture && Random.Shared.NextDouble() < _o.AmountDiscrepancyRate
+                ? amount + 0.01m
+                : amount,
             Currency = currency,
             Success = outcome.Success,
             AcquirerReference = outcome.Reference,

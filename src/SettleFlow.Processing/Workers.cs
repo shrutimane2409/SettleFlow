@@ -86,10 +86,26 @@ public sealed class SettlementProcessor(ISettlementGateway gateway)
 
         if (outcome.Success)
         {
+            var merchant = await db.Merchants.AsNoTracking().Where(m => m.Id == p.MerchantId)
+                .Select(m => new { m.FeeBps, m.FeeFixed }).SingleAsync(ct);
+            var fee = LedgerExtensions.ComputeFee(amount, merchant.FeeBps, merchant.FeeFixed);
+
             p.Status = PaymentStatus.Settled;
             p.CapturedAmount = amount;
+            p.FeeAmount = fee;
             p.SettledAt = now;
             p.SettlementReference = outcome.Reference;
+
+            // Same transaction as the status change: the books can never disagree with the payment.
+            var lines = new List<(string, decimal)>
+            {
+                (LedgerAccounts.Clearing(p.Currency), amount),
+                (LedgerAccounts.MerchantBalance(p.MerchantId, p.Currency), -(amount - fee))
+            };
+            if (fee > 0) lines.Add((LedgerAccounts.Fees(p.Currency), -fee));
+            await db.PostLedgerAsync(LedgerTypes.PaymentSettled, p.Id, p.Currency,
+                $"Settlement {outcome.Reference} ({amount:0.00}, fee {fee:0.00})", ct, [.. lines]);
+
             db.Enqueue(Topics.SettlementCompleted, p.Id.ToString(), new SettlementCompleted(p.Id, true, outcome.Reference!, now));
             db.RecordTimeline(p.Id, "Settled", source, $"{p.Currency} {amount:0.00} — reference {outcome.Reference}");
         }
@@ -185,6 +201,9 @@ public sealed class RefundWorker(
             refund.AcquirerReference = outcome.Reference;
             var captured = p.CapturedAmount ?? p.Amount;
             p.Status = succeededBefore + refund.Amount >= captured ? PaymentStatus.Refunded : PaymentStatus.PartiallyRefunded;
+            await db.PostLedgerAsync(LedgerTypes.Refund, refund.Id, refund.Currency, $"Refund {outcome.Reference} for payment {p.Id}", ct,
+                (LedgerAccounts.MerchantBalance(p.MerchantId, refund.Currency), refund.Amount),
+                (LedgerAccounts.Clearing(refund.Currency), -refund.Amount));
             db.RecordTimeline(p.Id, "Refunded", "refund-worker", $"{refund.Currency} {refund.Amount:0.00} — reference {outcome.Reference}");
         }
         else

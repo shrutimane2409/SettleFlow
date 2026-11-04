@@ -1,5 +1,5 @@
 import { session, type Session } from '../auth';
-import type { AuditEntry, DeadLetter, Merchant, NewPayment, Notification, Page, Payment, Refund, Stats, TimelineEntry, User, WebhookDelivery } from '../types';
+import type { AuditEntry, DeadLetter, LedgerAccount, LedgerEntryRow, Merchant, NewPayment, Notification, Page, Payment, Payout, PayoutDetail, ReconItem, ReconRun, Refund, Stats, TimelineEntry, TrialBalance, User, WebhookDelivery } from '../types';
 
 /** Empty by default: requests go to the same origin and are proxied (nginx in Docker, Vite in dev). */
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
@@ -90,6 +90,32 @@ export const api = {
       method: 'PUT', body: JSON.stringify({ url }),
     }),
   disableWebhook: (merchantId: string) => request<void>(`/api/merchants/${merchantId}/webhook`, { method: 'DELETE' }),
+
+  ledgerAccounts: () => request<LedgerAccount[]>('/api/ledger/accounts'),
+  ledgerEntries: (accountId: string) => request<LedgerEntryRow[]>(`/api/ledger/accounts/${encodeURIComponent(accountId)}/entries?take=50`),
+  trialBalance: () => request<TrialBalance>('/api/ledger/trial-balance'),
+
+  payouts: () => request<Payout[]>('/api/payouts?take=100'),
+  payout: (id: string) => request<PayoutDetail>(`/api/payouts/${id}`),
+  runPayouts: () => request<{ created: number }>('/api/payouts/run', { method: 'POST' }),
+  /** CSV needs the auth header, so fetch it as a blob and hand the browser an object URL. */
+  async downloadPayoutCsv(id: string, filename: string) {
+    const res = await fetch(`${BASE}/api/payouts/${id}/report.csv`, { headers: { Authorization: `Bearer ${session.get()?.token}` } });
+    if (!res.ok) throw new ApiError(res.status, 'Download failed');
+    const url = URL.createObjectURL(await res.blob());
+    const a = Object.assign(document.createElement('a'), { href: url, download: filename });
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+
+  reconRuns: () => request<ReconRun[]>('/api/reconciliation/runs'),
+  reconRun: (id: string) => request<{ run: ReconRun; items: ReconItem[] }>(`/api/reconciliation/runs/${id}`),
+  runReconciliation: () => request<ReconRun>('/api/reconciliation/runs', { method: 'POST', body: JSON.stringify({}) }),
+  resolveReconItem: (id: string, note: string) =>
+    request<ReconItem>(`/api/reconciliation/items/${id}/resolve`, { method: 'POST', body: JSON.stringify({ note }) }),
+
+  setFees: (merchantId: string, feeBps: number, feeFixed: number) =>
+    request<void>(`/api/merchants/${merchantId}/fees`, { method: 'PUT', body: JSON.stringify({ feeBps, feeFixed }) }),
 
   notifications: (take = 15) => request<Notification[]>(`/api/notifications?take=${take}`),
 

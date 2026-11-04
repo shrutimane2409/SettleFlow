@@ -23,6 +23,9 @@ public static class SettleFlowTelemetry
     public static readonly Counter<long> Refunds =
         Meter.CreateCounter<long>("settleflow.refunds", description: "Refund attempts by outcome");
 
+    public static readonly Counter<long> Payouts =
+        Meter.CreateCounter<long>("settleflow.payouts", description: "Payouts created");
+
     public static readonly Counter<long> WebhookDeliveries =
         Meter.CreateCounter<long>("settleflow.webhooks.deliveries", description: "Webhook delivery attempts by outcome");
 

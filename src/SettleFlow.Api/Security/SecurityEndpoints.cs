@@ -150,7 +150,7 @@ public static partial class SecurityEndpoints
 
     private static async Task<IResult> ListMerchants(SettleFlowDbContext db, CancellationToken ct) =>
         Results.Ok(await db.Merchants.AsNoTracking().OrderBy(m => m.Id)
-            .Select(m => new { m.Id, m.Name, m.ApiKeyPrefix, m.Disabled, m.CreatedAt, m.KeyRotatedAt, m.WebhookUrl })
+            .Select(m => new { m.Id, m.Name, m.ApiKeyPrefix, m.Disabled, m.CreatedAt, m.KeyRotatedAt, m.WebhookUrl, m.FeeBps, m.FeeFixed })
             .ToListAsync(ct));
 
     private static async Task<IResult> CreateMerchant(CreateMerchantRequest request, HttpContext ctx, SettleFlowDbContext db, CancellationToken ct)

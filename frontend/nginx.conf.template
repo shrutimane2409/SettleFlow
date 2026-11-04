@@ -3,6 +3,11 @@ server {
     root /usr/share/nginx/html;
     server_tokens off;
 
+    # Re-resolve the API's address every 10s instead of once at startup, so redeploying the API
+    # (new container IP) doesn't leave nginx forwarding to a stale address.
+    resolver ${NGINX_RESOLVER} valid=10s ipv6=off;
+    set $api_upstream ${API_UPSTREAM};
+
     # Security headers. inline styles are needed for React style={} props; no inline scripts are allowed.
     add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
     add_header X-Content-Type-Options "nosniff" always;
@@ -12,7 +17,7 @@ server {
 
     # The dashboard calls the API on the same origin; nginx forwards to the api container.
     location /api/ {
-        proxy_pass http://api:8080;
+        proxy_pass $api_upstream;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -22,7 +27,7 @@ server {
     }
 
     location /health {
-        proxy_pass http://api:8080;
+        proxy_pass $api_upstream;
     }
 
     # Hashed build assets can be cached forever.

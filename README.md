@@ -50,9 +50,29 @@ PendingFraud ─► FraudApproved ─► Settled ─► PartiallyRefunded ─►
 | Webhook URL | `PUT /api/merchants/me/webhook` (merchant) or `PUT /api/merchants/{id}/webhook` (admin) | Returns the signing secret **once** |
 | Deliveries | `GET /api/webhook-deliveries`, `POST /api/webhook-deliveries/{id}/resend` | |
 
+## Money: ledger, payouts, reconciliation
+
+**Double-entry ledger.** Every movement of money is a ledger transaction whose entries sum to zero (debit +, credit −), posted **in the same DB transaction** as the payment state change:
+
+| Event | Entries (example: 100.00 EUR, fee 1.5% + 0.25) |
+|---|---|
+| Settlement | Dr `acquirer:clearing:EUR` 100.00 · Cr `merchant:{id}:balance:EUR` 98.25 · Cr `platform:fees:EUR` 1.75 |
+| Refund 30 | Dr `merchant:{id}:balance:EUR` 30.00 · Cr `acquirer:clearing:EUR` 30.00 (the fee is kept) |
+| Payout | Dr `merchant:{id}:balance:EUR` net · Cr `acquirer:clearing:EUR` net |
+
+- Postgres enforces it: a **deferred constraint trigger** rejects any transaction that doesn't sum to zero at COMMIT, and ledger rows are **append-only** (corrections are new reversing transactions). Postings are idempotent per (type, reference).
+- Fees are configurable per merchant (`PUT /api/merchants/{id}/fees`), rounded half away from zero, and never more than the amount.
+- `GET /api/ledger/accounts`, `/api/ledger/trial-balance`, `/api/ledger/transactions?reference=`; merchants use `GET /api/balance`.
+
+**Payouts (settlement batches).** A scheduled job (daily; every 5 min in the local demo) groups each merchant's settled payments and completed refunds into a payout: net = gross − fees − refunds. If net ≤ 0, the items carry over. A payout marks its items, posts to the ledger, sends a `payout.paid` webhook, and has a CSV line-item report (`GET /api/payouts/{id}/report.csv`). Admins can run it on demand (`POST /api/payouts/run`).
+
+**Reconciliation.** Hourly (or `POST /api/reconciliation/runs`), every settlement and refund is matched three ways: SettleFlow ⇄ the acquirer's own records ⇄ the ledger. It also runs a trial balance per currency. Discrepancy kinds: `AmountMismatch`, `MissingAtAcquirer`, `MissingInSettleFlow`, `MissingLedgerPosting`, `LedgerImbalance`. Each is resolved by an admin with a note, which is audited. The local demo makes the acquirer record ~3% of captures 0.01 off (`Settlement:AmountDiscrepancyRate`) so there is something to find. Gauge: `settleflow_reconciliation_discrepancies`.
+
+> Payments settled before the acquirer kept records (before phase 2) show up as `MissingAtAcquirer` in reconciliation. That's accurate; resolve them with a note.
+
 ## Webhooks
 
-Merchant-facing events (`payment.authorized`, `payment.settled`, `payment.failed`, `payment.voided`, `refund.succeeded`, `refund.failed`) are POSTed to the merchant's URL with:
+Merchant-facing events (`payment.authorized`, `payment.settled`, `payment.failed`, `payment.voided`, `refund.succeeded`, `refund.failed`, `payout.paid`) are POSTed to the merchant's URL with:
 
 ```
 SettleFlow-Event: payment.settled
@@ -120,6 +140,7 @@ const ok = crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(v1)) && Mat
 - **Simulated acquirer**: realistic latency, random transient outages (retried automatically), declines for blocked merchants and unsupported currencies, and a merchant that is always down (`merchant_outage`) to demonstrate the DLQ.
 - **Payment timeline**: every step is recorded and shown in the dashboard.
 - **Observability**: one **distributed trace per payment** across all services (trace context travels in Kafka headers, viewable in Jaeger); Prometheus metrics from every service; a provisioned Grafana dashboard; JSON health checks (`/health/live`, `/health/ready`).
+- **Finance**: double-entry ledger with DB-enforced balance, per-merchant fees, payout batches with CSV reports, and three-way reconciliation.
 - **Ops dashboard**: live KPIs, throughput chart, one-click test scenarios, a "burst ×10" load button, search and filters, a timeline drawer, review actions, notifications feed and dead-letter replay.
 
 ## Run it

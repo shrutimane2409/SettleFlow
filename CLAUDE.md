@@ -62,10 +62,16 @@ settlement.completed / payments.failed → notification workers → notification
 - `RetentionService` (hosted in the API) purges old rows and voids expired authorizations. Tests call `RunOnceAsync` directly, with `Retention:Enabled=false`.
 - Policies: `PaymentsWrite` (admin, analyst, merchant) for create/capture/void/refund; `PaymentsAccess` for reads.
 
+### Money (Phase 3)
+- Post money movements with `db.PostLedgerAsync(type, reference, currency, description, ct, (account, amount)…)` **inside the same unit of work** as the state change. Debit is +, credit is −, and the lines must sum to 0 (checked in code **and** by a deferred DB trigger at COMMIT). It's idempotent per (type, reference). Account codes come from `LedgerAccounts.*`.
+- Ledger tables are append-only (DB triggers). Never update or delete; post a reversing transaction instead.
+- `PayoutService` and `ReconciliationService` (in `Finance.cs`) are hosted in the API, each run is single-instance via a Postgres advisory lock, and both are callable on demand from the API. Tests disable the schedules (`Payouts:Enabled=false`, `Reconciliation:Enabled=false`, `Reconciliation:Grace=0`) and call the endpoints.
+- `AcquirerTransactions` is "the bank's" data: reconciliation treats it as the external source of truth, and tests tamper with it via SQL to create discrepancies.
+
 ### Demo hooks (`SettlementOptions`)
 `merchant_outage` always throws (circuit opens, then the DLQ). `merchant_slow` exceeds the timeout. `blocked_*` merchants are declined, and only EUR/GBP/USD are supported. Random transient failures run at `TransientFailureRate` (set to 0 in the integration tests).
 
 ### Other
-- In Docker, nginx (`frontend/nginx.conf`) proxies `/api` and `/health` to the API, so the dashboard uses relative URLs. CORS is only needed for the Vite dev server.
+- In Docker, nginx (`frontend/nginx.conf.template`, rendered by envsubst; `NGINX_RESOLVER`, `API_UPSTREAM`) proxies `/api` and `/health` to the API, re-resolving its address every 10 s, so the dashboard uses relative URLs. CORS is only needed for the Vite dev server.
 - Traces are exported only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. The outbox polling loop suppresses instrumentation so it doesn't flood Jaeger.
 - The Grafana dashboard is `monitoring/grafana/provisioning/dashboards/settleflow.json`. It uses Prometheus metric names like `settleflow_fraud_decisions_total`, generated from the instruments in `Telemetry.cs`.

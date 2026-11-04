@@ -70,7 +70,10 @@ public sealed class SettleFlowFixture : IAsyncLifetime
         ["Webhooks:PollInterval"] = "00:00:00.100",
         ["Settlement:Timeout"] = "00:00:00.500",
         ["Settlement:SlowLatencyMs"] = "2000",
-        ["Retention:Enabled"] = "false"
+        ["Retention:Enabled"] = "false",
+        ["Payouts:Enabled"] = "false",
+        ["Reconciliation:Enabled"] = "false",
+        ["Reconciliation:Grace"] = "00:00:00"
     };
 
     public async Task InitializeAsync()
