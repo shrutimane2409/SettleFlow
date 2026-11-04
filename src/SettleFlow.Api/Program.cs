@@ -15,9 +15,13 @@ builder.AddSettleFlowAuth();
 builder.Services.AddWebhookSecrets(builder.Configuration);
 builder.Services.AddRetention(builder.Configuration);
 builder.Services.AddFinance(builder.Configuration);
+builder.Services.AddSingleton<PaymentChangeFeed>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<PaymentChangeFeed>());
 
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
-builder.Services.AddProblemDetails();
+// Errors carry the trace id so a user-reported error can be found in logs/traces.
+builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = ctx =>
+    ctx.ProblemDetails.Extensions["traceId"] = System.Diagnostics.Activity.Current?.TraceId.ToString());
 
 // CORS: the dashboard is normally served through the nginx proxy (same origin), but allow the
 // Vite dev server and any extra origins from config for local development.
@@ -27,7 +31,7 @@ builder.Services.AddCors(o => o.AddPolicy("Frontend", p => p
     .WithOrigins(corsOrigins)
     .AllowAnyHeader()
     .AllowAnyMethod()
-    .WithExposedHeaders("Location", "Idempotent-Replayed")));
+    .WithExposedHeaders("Location", "Idempotent-Replayed", "X-Correlation-Id")));
 
 // Rate limits: payment creation per caller (merchant / user, falling back to IP), login attempts per IP.
 var permitLimit = builder.Configuration.GetValue("RateLimiting:PaymentsPerWindow", 60);
@@ -68,6 +72,12 @@ app.UseExceptionHandler();
 app.UseStatusCodePages();
 if (!app.Environment.IsDevelopment()) app.UseHsts();
 app.UseSecurityHeaders();
+app.Use((ctx, next) =>
+{
+    // Correlation id = trace id: quote it in a support ticket and find the request in Jaeger and Loki.
+    if (System.Diagnostics.Activity.Current is { } a) ctx.Response.Headers["X-Correlation-Id"] = a.TraceId.ToString();
+    return next();
+});
 app.UseSerilogRequestLoggingIfEnabled();
 app.UseCors("Frontend");
 app.UseAuthentication();
@@ -83,7 +93,16 @@ app.MapPaymentEndpoints();
 app.MapLifecycleEndpoints();
 app.MapOperationsEndpoints();
 app.MapFinanceEndpoints();
+app.MapLiveStreamEndpoints();
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription().AllowAnonymous();
+
+// Kubernetes runs `dotnet SettleFlow.Api.dll --migrate-only` as a pre-upgrade Job: migrate, seed, exit.
+if (args.Contains("--migrate-only"))
+{
+    await app.InitializeSettleFlowAsync(migrate: true);
+    await SecurityBootstrapper.SeedAsync(app.Services);
+    return;
+}
 
 await app.InitializeSettleFlowAsync();
 await SecurityBootstrapper.SeedAsync(app.Services);

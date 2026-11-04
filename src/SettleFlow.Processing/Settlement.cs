@@ -39,7 +39,8 @@ public sealed class SettlementOptions
     // ---- resilience ----
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(2);
     public double CircuitFailureRatio { get; set; } = 0.5;
-    public int CircuitMinimumThroughput { get; set; } = 4;
+    /// <summary>Calls needed in the sampling window before the breaker may trip, so random noise can't open it.</summary>
+    public int CircuitMinimumThroughput { get; set; } = 20;
     public TimeSpan CircuitSamplingDuration { get; set; } = TimeSpan.FromSeconds(30);
     public TimeSpan CircuitBreakDuration { get; set; } = TimeSpan.FromSeconds(15);
 }

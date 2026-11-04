@@ -1,0 +1,117 @@
+# SettleFlow SLOs and alerts.
+#
+# SLOs
+#   1. API availability: 99.9% of API requests succeed (non-5xx), over 30 days.
+#   2. Settlement latency: 99% of automatically captured payments settle within 10 seconds.
+#   3. Payment creation latency: p95 of POST /api/payments under 300 ms.
+#
+# Burn-rate alerts follow the multi-window approach from the Google SRE workbook:
+# page when the error budget burns 14.4x too fast (2% of a 30-day budget in 1h),
+# warn at 6x (5% in 6h). The short window confirms the problem is still happening.
+
+groups:
+  - name: settleflow-slo-recording
+    interval: 30s
+    rules:
+      - record: slo:api_errors:ratio_rate5m
+        expr: |
+          (sum(rate(http_server_request_duration_seconds_count{service="api", http_route=~"/api/.*", http_response_status_code=~"5.."}[5m])) or vector(0))
+          / clamp_min(sum(rate(http_server_request_duration_seconds_count{service="api", http_route=~"/api/.*"}[5m])), 1e-9)
+      - record: slo:api_errors:ratio_rate30m
+        expr: |
+          (sum(rate(http_server_request_duration_seconds_count{service="api", http_route=~"/api/.*", http_response_status_code=~"5.."}[30m])) or vector(0))
+          / clamp_min(sum(rate(http_server_request_duration_seconds_count{service="api", http_route=~"/api/.*"}[30m])), 1e-9)
+      - record: slo:api_errors:ratio_rate1h
+        expr: |
+          (sum(rate(http_server_request_duration_seconds_count{service="api", http_route=~"/api/.*", http_response_status_code=~"5.."}[1h])) or vector(0))
+          / clamp_min(sum(rate(http_server_request_duration_seconds_count{service="api", http_route=~"/api/.*"}[1h])), 1e-9)
+      - record: slo:api_errors:ratio_rate6h
+        expr: |
+          (sum(rate(http_server_request_duration_seconds_count{service="api", http_route=~"/api/.*", http_response_status_code=~"5.."}[6h])) or vector(0))
+          / clamp_min(sum(rate(http_server_request_duration_seconds_count{service="api", http_route=~"/api/.*"}[6h])), 1e-9)
+
+      - record: slo:settled_within_10s:ratio_rate1h
+        expr: |
+          sum(rate(settleflow_payment_time_to_settle_seconds_bucket{le=~"10(\\.0)?"}[1h]))
+          / clamp_min(sum(rate(settleflow_payment_time_to_settle_seconds_count[1h])), 1e-9)
+      - record: slo:time_to_settle:p95_5m
+        expr: histogram_quantile(0.95, sum by (le) (rate(settleflow_payment_time_to_settle_seconds_bucket[5m])))
+
+      - record: slo:create_payment_latency:p95_5m
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{service="api", http_route="/api/payments/", http_request_method="POST"}[5m])))
+
+  - name: settleflow-slo-alerts
+    rules:
+      - alert: ApiErrorBudgetFastBurn
+        expr: slo:api_errors:ratio_rate1h > (14.4 * 0.001) and slo:api_errors:ratio_rate5m > (14.4 * 0.001)
+        for: 2m
+        labels: { severity: page, slo: api-availability }
+        annotations:
+          summary: API is burning its 99.9% error budget 14x too fast
+          description: "{{ $value | humanizePercentage }} of API requests are failing (5xx). At this rate the monthly budget is gone in ~2 days."
+      - alert: ApiErrorBudgetSlowBurn
+        expr: slo:api_errors:ratio_rate6h > (6 * 0.001) and slo:api_errors:ratio_rate30m > (6 * 0.001)
+        for: 15m
+        labels: { severity: warning, slo: api-availability }
+        annotations:
+          summary: API error budget burning 6x too fast
+      - alert: SettlementLatencySLO
+        expr: slo:settled_within_10s:ratio_rate1h < 0.99
+        for: 10m
+        labels: { severity: warning, slo: settlement-latency }
+        annotations:
+          summary: Fewer than 99% of payments settle within 10s
+          description: "Only {{ $value | humanizePercentage }} settled within 10 seconds over the last hour."
+      - alert: CreatePaymentSlow
+        expr: slo:create_payment_latency:p95_5m > 0.3
+        for: 10m
+        labels: { severity: warning, slo: create-latency }
+        annotations:
+          summary: "POST /api/payments p95 is {{ $value | humanizeDuration }} (target 300ms)"
+
+  - name: settleflow-operational
+    rules:
+      - alert: ServiceDown
+        expr: up{job="settleflow"} == 0
+        for: 1m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.service }} is down"
+      - alert: DeadLettersIncreasing
+        expr: sum by (consumer) (increase(settleflow_events_dead_lettered_total[10m])) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.consumer }} dead-lettered messages in the last 10 minutes"
+          description: Check the Dead letters page, fix the cause, then replay.
+      - alert: OutboxBacklog
+        expr: max(settleflow_outbox_pending) > 100
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $value }} events are stuck in the outbox"
+          description: Kafka may be unreachable; events are safe in Postgres and will be published when it recovers.
+      - alert: ConsumerLagHigh
+        expr: sum by (consumer) (settleflow_consumer_lag) > 500
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.consumer }} is {{ $value }} messages behind"
+          description: Scale the worker (KEDA does this automatically in Kubernetes) or check for slow handlers.
+      - alert: AcquirerCircuitOpen
+        expr: max by (merchant) (settleflow_acquirer_circuit_open) == 1
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: "Acquirer circuit open for {{ $labels.merchant }}"
+          description: Calls are failing fast; payments for this merchant are being dead-lettered.
+      - alert: ReconciliationDiscrepancies
+        expr: max(settleflow_reconciliation_discrepancies) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "Last reconciliation found {{ $value }} discrepancies"
+      - alert: WebhookDeliveriesFailing
+        expr: sum(increase(settleflow_webhooks_deliveries_total{outcome="failed"}[15m])) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: Webhook deliveries exhausted their retries

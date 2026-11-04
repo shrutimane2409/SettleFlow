@@ -19,17 +19,30 @@ public sealed class KafkaOptions
     /// <summary>Prefix for consumer groups. Each consumer class gets its own group: <c>{GroupId}.{ConsumerName}</c>.</summary>
     public string GroupId { get; set; } = "settleflow";
 
-    public int TopicPartitions { get; set; } = 3;
+    /// <summary>Partitions per topic = the maximum parallelism of each consumer group. Existing topics are grown to this at startup.</summary>
+    public int TopicPartitions { get; set; } = 12;
 
     /// <summary>Handler attempts before a message is dead-lettered (non-transient errors only).</summary>
     public int MaxHandlerAttempts { get; set; } = 5;
+
+    /// <summary>
+    /// When a downstream circuit breaker is open, the lane pauses this long per wait instead of burning
+    /// handler attempts; after <see cref="MaxCircuitWaits"/> waits (a sustained outage) the message is dead-lettered.
+    /// </summary>
+    public TimeSpan CircuitOpenWait { get; set; } = TimeSpan.FromSeconds(5);
+    public int MaxCircuitWaits { get; set; } = 6;
 }
 
 public sealed class OutboxOptions
 {
     public bool Enabled { get; set; } = true;
     public int BatchSize { get; set; } = 100;
-    public TimeSpan PollInterval { get; set; } = TimeSpan.FromMilliseconds(200);
+
+    /// <summary>Safety-net poll. Normally the publisher is woken instantly by a Postgres NOTIFY when a row is inserted.</summary>
+    public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>Use LISTEN/NOTIFY to wake up as soon as an outbox row is written.</summary>
+    public bool UseNotifications { get; set; } = true;
     public TimeSpan Retention { get; set; } = TimeSpan.FromDays(7);
 }
 
@@ -81,7 +94,26 @@ public static class KafkaTopicInitializer
         {
             try
             {
-                var existing = admin.GetMetadata(TimeSpan.FromSeconds(10)).Topics.Select(t => t.Topic).ToHashSet();
+                var metadata = admin.GetMetadata(TimeSpan.FromSeconds(10)).Topics;
+                var existing = metadata.Select(t => t.Topic).ToHashSet();
+
+                // Grow topics created with fewer partitions (e.g. by an older version) so parallelism can increase.
+                // Note: keys of in-flight messages may map to a new partition once; the inbox keeps processing idempotent.
+                var tooSmall = metadata.Where(t => Topics.All.Contains(t.Topic) && t.Partitions.Count < options.TopicPartitions)
+                    .Select(t => new PartitionsSpecification { Topic = t.Topic, IncreaseTo = options.TopicPartitions }).ToList();
+                if (tooSmall.Count > 0)
+                {
+                    try
+                    {
+                        await admin.CreatePartitionsAsync(tooSmall);
+                        logger.LogInformation("Increased partitions to {Count} for {Topics}", options.TopicPartitions, string.Join(", ", tooSmall.Select(t => t.Topic)));
+                    }
+                    catch (CreatePartitionsException ex) when (ex.Results.All(r => r.Error.Code is ErrorCode.NoError or ErrorCode.InvalidPartitions))
+                    {
+                        // Another service grew them concurrently.
+                    }
+                }
+
                 var missing = Topics.All.Where(t => !existing.Contains(t))
                     .Select(t => new TopicSpecification { Name = t, NumPartitions = options.TopicPartitions, ReplicationFactor = -1 })
                     .ToList();
@@ -134,11 +166,28 @@ public sealed class OutboxPublisher(
         """;
 
     private DateTimeOffset _lastMaintenance = DateTimeOffset.MinValue;
+    private readonly SemaphoreSlim _wakeUp = new(0, 1);
+
+    private void WakeUp()
+    {
+        if (_wakeUp.CurrentCount == 0)
+        {
+            try { _wakeUp.Release(); } catch (SemaphoreFullException) { }
+        }
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var opts = options.Value;
         if (!opts.Enabled) return;
+
+        if (opts.UseNotifications)
+        {
+            string connectionString;
+            using (var scope = scopes.CreateScope())
+                connectionString = scope.ServiceProvider.GetRequiredService<SettleFlowDbContext>().Database.GetConnectionString()!;
+            _ = Task.Run(() => PostgresListener.ListenAsync(connectionString, PostgresListener.OutboxChannel, _ => WakeUp(), logger, stoppingToken), stoppingToken);
+        }
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -155,9 +204,10 @@ public sealed class OutboxPublisher(
             catch (Exception ex) { logger.LogError(ex, "Outbox loop failed"); }
 
             // A full batch means there is probably more waiting: go again immediately.
+            // Otherwise sleep until a NOTIFY arrives (new outbox row) or the safety-net poll interval passes.
             if (published < opts.BatchSize)
             {
-                try { await Task.Delay(opts.PollInterval, stoppingToken); }
+                try { await _wakeUp.WaitAsync(opts.PollInterval, stoppingToken); }
                 catch (OperationCanceledException) { break; }
             }
         }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { api } from './api/client';
 
 /**
  * Fetches data immediately and then every `intervalMs` while the tab is visible.
@@ -61,3 +62,55 @@ export const timeAgo = (iso: string) => {
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   return new Date(iso).toLocaleDateString();
 };
+
+export type LiveState = 'connecting' | 'live' | 'offline';
+
+/**
+ * Subscribes to the server's payment change stream (Server-Sent Events) and calls onChange,
+ * debounced, whenever payments change. Stream tokens live 60s, so every (re)connect fetches a fresh one.
+ */
+export function useLiveStream(onChange: () => void, debounceMs = 300): LiveState {
+  const [state, setState] = useState<LiveState>('connecting');
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  useEffect(() => {
+    let source: EventSource | null = null;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let debounce: ReturnType<typeof setTimeout> | undefined;
+    let stopped = false;
+
+    const connect = async () => {
+      setState('connecting');
+      try {
+        const { token } = await api.streamToken();
+        if (stopped) return;
+        source = new EventSource(api.streamUrl(token));
+        source.addEventListener('hello', () => setState('live'));
+        source.addEventListener('payment', () => {
+          clearTimeout(debounce);
+          debounce = setTimeout(() => onChangeRef.current(), debounceMs);
+        });
+        source.onerror = () => {
+          // Don't let EventSource retry with the (soon expired) token: reconnect ourselves.
+          source?.close();
+          setState('offline');
+          if (!stopped) retry = setTimeout(connect, 3000);
+        };
+      } catch {
+        setState('offline');
+        if (!stopped) retry = setTimeout(connect, 5000);
+      }
+    };
+
+    connect();
+    return () => {
+      stopped = true;
+      source?.close();
+      clearTimeout(retry);
+      clearTimeout(debounce);
+    };
+  }, [debounceMs]);
+
+  return state;
+}

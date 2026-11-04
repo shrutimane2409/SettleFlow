@@ -117,6 +117,9 @@ export const api = {
   setFees: (merchantId: string, feeBps: number, feeFixed: number) =>
     request<void>(`/api/merchants/${merchantId}/fees`, { method: 'PUT', body: JSON.stringify({ feeBps, feeFixed }) }),
 
+  streamToken: () => request<{ token: string; expiresAt: string }>('/api/stream/token', { method: 'POST' }),
+  streamUrl: (token: string) => `${BASE}/api/stream?access_token=${encodeURIComponent(token)}`,
+
   notifications: (take = 15) => request<Notification[]>(`/api/notifications?take=${take}`),
 
   deadLetters: (includeReplayed = false) => request<DeadLetter[]>(`/api/dead-letters?includeReplayed=${includeReplayed}`),

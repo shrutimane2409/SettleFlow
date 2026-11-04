@@ -95,6 +95,8 @@ public sealed class SettlementProcessor(ISettlementGateway gateway)
             p.FeeAmount = fee;
             p.SettledAt = now;
             p.SettlementReference = outcome.Reference;
+            if (p.CaptureMode == CaptureModes.Automatic)
+                SettleFlowTelemetry.TimeToSettle.Record((now - p.CreatedAt).TotalSeconds);
 
             // Same transaction as the status change: the books can never disagree with the payment.
             var lines = new List<(string, decimal)>

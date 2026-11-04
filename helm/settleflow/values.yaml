@@ -9,26 +9,50 @@ postgresSecret: settleflow-secrets
 kafka:
   bootstrapServers: redpanda:9092
 
-# Leave empty to disable trace export.
+# Leave empty to disable trace export / log shipping.
 otlpEndpoint: http://jaeger-collector:4317
+lokiUrl: ""
 
 resources:
   requests: { cpu: 50m, memory: 128Mi }
   limits: { cpu: 500m, memory: 512Mi }
+
+# Migrations run once per release as a pre-install/pre-upgrade Job; services wait for them.
+migrations:
+  enabled: true
+
+# Autoscale workers on Kafka consumer lag (requires KEDA: https://keda.sh).
+keda:
+  enabled: false
+  lagThreshold: "50"
+  maxReplicas: 10
 
 services:
   api:
     replicas: 2
     groupId: settleflow-api
     expose: true
+    pdbMinAvailable: 1
+    hpa: { enabled: true, minReplicas: 2, maxReplicas: 6, cpuUtilization: 70 }
   fraud-worker:
     replicas: 2
     groupId: settleflow-fraud
+    pdbMinAvailable: 1
+    # Consumer group = {groupId}.{HandlerClass}; KEDA watches these.
+    consumers:
+      - { group: settleflow-fraud.FraudWorker, topic: payments.created }
   settlement-worker:
     replicas: 2
     groupId: settleflow-settlement
+    pdbMinAvailable: 1
     env:
       Settlement__TransientFailureRate: "0.1"
+    consumers:
+      - { group: settleflow-settlement.SettlementWorker, topic: payments.fraud.completed }
+      - { group: settleflow-settlement.RefundWorker, topic: refunds.requested }
   notification-worker:
     replicas: 1
     groupId: settleflow-notification
+    pdbMinAvailable: 0
+    consumers:
+      - { group: settleflow-notification.NotificationSinkWorker, topic: notifications.requested }

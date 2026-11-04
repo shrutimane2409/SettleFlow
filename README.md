@@ -70,6 +70,36 @@ PendingFraud ─► FraudApproved ─► Settled ─► PartiallyRefunded ─►
 
 > Payments settled before the acquirer kept records (before phase 2) show up as `MissingAtAcquirer` in reconciliation. That's accurate; resolve them with a note.
 
+## Observability & operations
+
+| Signal | Where | Notes |
+|---|---|---|
+| **Traces** | Jaeger :16686 | One trace per payment across all services (trace context in Kafka headers) |
+| **Logs** | Grafana → Explore → Loki | JSON logs from every service. Each line has a `TraceId` that links to the trace |
+| **Metrics** | Prometheus :9090, Grafana | Business metrics, consumer lag, time-to-settle, circuit breakers, outbox, webhooks, payouts, reconciliation |
+| **Correlation id** | `X-Correlation-Id` response header, and `traceId` in error bodies | The same id appears in the logs and in Jaeger |
+| **Alerts** | Alertmanager :9093 | Routed to `webhook-receiver` locally; add Slack in `monitoring/alertmanager.yml` |
+
+**SLOs** (`monitoring/alerts.yml`, Grafana dashboard "SettleFlow SLOs"):
+
+| SLO | Target | Alerting |
+|---|---|---|
+| API availability | 99.9% non-5xx | Multi-window burn rate: page at 14.4× (1h and 5m), warn at 6× (6h and 30m) |
+| Settlement latency | 99% of payments settle within 10 s | Warn when the 1 h ratio drops below 99% |
+| Create latency | p95 `POST /api/payments` < 300 ms | Warn after 10 min above target |
+
+Operational alerts: service down, dead letters, outbox backlog, consumer lag, acquirer circuit open, reconciliation discrepancies, and webhook deliveries exhausting their retries.
+
+**Real-time without polling.** Postgres triggers `pg_notify` on outbox inserts and payment changes:
+- Outbox publishers wake **instantly**, with a 1 s poll kept only as a safety net. Tests prove it: with the fallback poll set to 5 s, a payment still settles in under 4 s.
+- The dashboard subscribes to `GET /api/stream` (Server-Sent Events) and refreshes the moment a payment changes. EventSource can't send headers, so it uses a **60-second stream-only token** (`POST /api/stream/token`). Long-lived tokens are never put in URLs, and stream tokens are rejected everywhere else.
+
+**Kubernetes** (`helm/settleflow`):
+- Migrations run as a `pre-install`/`pre-upgrade` **Job** (`--migrate-only`). Pods start with `Database__MigrateOnStartup=false` and wait for it.
+- **Graceful shutdown**: on SIGTERM, `/health/ready` turns red first (draining check), then in-flight work gets 30 s (`terminationGracePeriodSeconds: 40`).
+- PodDisruptionBudgets, an HPA for the API (CPU), and **KEDA** autoscaling for workers based on **Kafka consumer lag** (`keda.enabled=true`).
+- Rolling updates with `maxUnavailable: 0`.
+
 ## Webhooks
 
 Merchant-facing events (`payment.authorized`, `payment.settled`, `payment.failed`, `payment.voided`, `refund.succeeded`, `refund.failed`, `payout.paid`) are POSTed to the merchant's URL with:
@@ -102,6 +132,7 @@ const ok = crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(v1)) && Mat
 |---|---|
 | DB write succeeds but Kafka publish fails (or vice versa) | **Transactional outbox**: events are written in the same transaction as the state change, and published afterwards. |
 | Several publishers / API replicas | Outbox rows are claimed with `FOR UPDATE SKIP LOCKED`; a row is only sent after every earlier row for the same topic and key, so **per-payment ordering** holds even when a publish is retried. Failed publishes back off exponentially. |
+| One slow step backs everything up | Consumers process **partitions in parallel** (one ordered lane per partition, 12 partitions), so throughput scales with partitions and replicas while per-payment ordering holds. Lanes drain before a rebalance hands their partition away. |
 | Kafka delivers a message twice | **Inbox** per consumer `(Consumer, EventId)`, written in the handler's transaction. Handlers also check the payment's state, so they are idempotent. |
 | Client retries a POST | `Idempotency-Key` header stored with a unique constraint and a hash of the request. Same key and body: the same payment is returned (`Idempotent-Replayed: true`). Same key with a different body: `409`. Race-safe under concurrency. |
 | Database or broker briefly down | Transient errors are retried with backoff and **never skip** the message. |
@@ -161,6 +192,7 @@ docker compose up --build
 | Traces (Jaeger) | http://localhost:16686 |
 | Grafana | http://localhost:3001 |
 | Prometheus | http://localhost:9090 |
+| Alertmanager | http://localhost:9093 |
 
 Migrations and Kafka topics are applied automatically at startup. If you have a database volume from a version before migrations were introduced, reset it once with `docker compose down -v`.
 
@@ -201,6 +233,22 @@ curl -H "$AUTH" -X POST http://localhost:8083/api/payments/{id}/review \
 curl -H "$AUTH" http://localhost:8083/api/stats
 curl -H "$AUTH" -X POST http://localhost:8083/api/merchants -H 'Content-Type: application/json' -d '{"id":"acme","name":"Acme"}'
 curl -H "$AUTH" http://localhost:8083/api/audit
+```
+
+## Performance
+
+50 payments/s sustained on a laptop: API p95 **3.6 ms**, time-to-settle p95 **1.75 s**, 0 errors, max consumer lag 1.
+See [docs/performance.md](docs/performance.md), including the three pipeline bottlenecks the first load test found and how they were fixed.
+
+## Developer commands
+
+```bash
+make up            # build + start everything
+make test          # unit + end-to-end tests
+make load-test     # k6: 50 payments/s for 60s (RATE=… DURATION=…)
+make logs          # follow service logs
+make migration name=AddThing
+make reset         # wipe local data (asks first)
 ```
 
 ## Local development without Docker for .NET

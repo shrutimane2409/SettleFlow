@@ -4,7 +4,7 @@ import { Activity, BookOpen, CreditCard, FileClock, Inbox, Landmark, LogOut, Ref
 import { api } from './api/client';
 import { can, session, useSession } from './auth';
 import { PaymentDrawer } from './components/PaymentDrawer';
-import { useHashRoute, usePolling } from './hooks';
+import { useHashRoute, useLiveStream, usePolling } from './hooks';
 import { AuditLog, Merchants, Users } from './pages/Admin';
 import { DeadLetters } from './pages/DeadLetters';
 import { Ledger, Payouts, Reconciliation } from './pages/Finance';
@@ -39,6 +39,8 @@ function App() {
   const [selected, setSelected] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const bump = () => setTick(t => t + 1);
+  // Pushed updates: any payment change refreshes the current page immediately.
+  const live = useLiveStream(bump);
 
   const { data: stats } = usePolling(api.stats, 4000, [tick]);
   const { data: health, error: healthError } = usePolling(
@@ -86,7 +88,12 @@ function App() {
             <h1>{current.title}</h1>
             <p className="muted">{current.subtitle}</p>
           </div>
-          <button onClick={bump}><RefreshCw size={16} /> Refresh</button>
+          <div className="header-actions">
+            <span className={`live-badge ${live}`} title="Updates are pushed from the server over Server-Sent Events">
+              <i /> {live === 'live' ? 'Live' : live === 'connecting' ? 'Connecting…' : 'Offline, retrying'}
+            </span>
+            <button onClick={bump}><RefreshCw size={16} /> Refresh</button>
+          </div>
         </header>
 
         {current.route === 'overview' && <Overview onSelect={setSelected} tick={tick} onCreated={bump} />}

@@ -19,6 +19,10 @@ public sealed class AuthOptions
     public string JwtSigningKey { get; set; } = "";
     public string Issuer { get; set; } = "settleflow";
     public string Audience { get; set; } = "settleflow-dashboard";
+
+    /// <summary>Audience of the short-lived tokens that may only open the live event stream.</summary>
+    public string StreamAudience { get; set; } = "settleflow-stream";
+    public TimeSpan StreamTokenLifetime { get; set; } = TimeSpan.FromSeconds(60);
     public TimeSpan TokenLifetime { get; set; } = TimeSpan.FromHours(8);
     public int MaxFailedLogins { get; set; } = 5;
     public TimeSpan LockoutDuration { get; set; } = TimeSpan.FromMinutes(5);
@@ -67,19 +71,28 @@ public static class AuthSetup
                 o.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidIssuer = options.Issuer,
-                    ValidAudience = options.Audience,
+                    ValidAudiences = [options.Audience, options.StreamAudience],
                     IssuerSigningKey = TokenService.SigningKey(options),
                     NameClaimType = JwtRegisteredClaimNames.Name,
                     RoleClaimType = "role",
                     ClockSkew = TimeSpan.FromSeconds(30)
                 };
                 // The live event stream (EventSource) cannot send headers, so it passes the token in the query string.
+                // Stream tokens (60s, stream audience) are the only tokens accepted in a query string,
+                // and are only valid for the stream endpoint. Long-lived tokens never end up in URLs or logs.
                 o.Events = new JwtBearerEvents
                 {
                     OnMessageReceived = ctx =>
                     {
-                        if (ctx.Request.Path.StartsWithSegments("/api/stream") && ctx.Request.Query.TryGetValue("access_token", out var t))
+                        if (IsStreamEndpoint(ctx.Request) && ctx.Request.Query.TryGetValue("access_token", out var t))
                             ctx.Token = t;
+                        return Task.CompletedTask;
+                    },
+                    OnTokenValidated = ctx =>
+                    {
+                        var isStreamToken = ctx.Principal!.FindAll("aud").Any(a => a.Value == options.StreamAudience);
+                        if (isStreamToken != IsStreamEndpoint(ctx.Request))
+                            ctx.Fail(isStreamToken ? "Stream tokens only work for /api/stream" : "Use a stream token for /api/stream");
                         return Task.CompletedTask;
                     }
                 };
@@ -96,6 +109,8 @@ public static class AuthSetup
 
         return builder;
     }
+
+    private static bool IsStreamEndpoint(HttpRequest r) => HttpMethods.IsGet(r.Method) && r.Path.Equals("/api/stream");
 }
 
 public sealed class TokenService(IOptions<AuthOptions> options)
@@ -118,6 +133,30 @@ public sealed class TokenService(IOptions<AuthOptions> options)
                 [JwtRegisteredClaimNames.Name] = user.Username,
                 ["role"] = user.Role
             }
+        });
+        return (token, expires);
+    }
+
+    /// <summary>A 60-second token that can only open the live stream, carrying the caller's identity.</summary>
+    public (string Token, DateTimeOffset ExpiresAt) IssueStreamToken(Actor actor)
+    {
+        var o = options.Value;
+        var expires = DateTimeOffset.UtcNow + o.StreamTokenLifetime;
+        var claims = new Dictionary<string, object>
+        {
+            [JwtRegisteredClaimNames.Sub] = actor.Name,
+            [JwtRegisteredClaimNames.Name] = actor.Name,
+            ["role"] = actor.Role
+        };
+        if (actor.MerchantId is not null) claims[Actor.MerchantClaim] = actor.MerchantId;
+
+        var token = new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
+        {
+            Issuer = o.Issuer,
+            Audience = o.StreamAudience,
+            Expires = expires.UtcDateTime,
+            SigningCredentials = new SigningCredentials(SigningKey(o), SecurityAlgorithms.HmacSha256),
+            Claims = claims
         });
         return (token, expires);
     }

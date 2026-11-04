@@ -1,0 +1,26 @@
+{{- if .Values.migrations.enabled }}
+# Runs EF Core migrations (and seeds the first admin) once per install/upgrade, before new pods roll out.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-migrate-{{ .Release.Revision }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      securityContext: { runAsNonRoot: true }
+      containers:
+        - name: migrate
+          image: "{{ .Values.image.registry }}/settleflow-api:{{ .Values.image.tag }}"
+          args: ["--migrate-only"]
+          env:
+            {{- include "settleflow.env" (dict "root" . "svc" .Values.services.api) | nindent 12 }}
+            {{- include "settleflow.apiSecrets" . | nindent 12 }}
+          securityContext: { allowPrivilegeEscalation: false }
+{{- end }}

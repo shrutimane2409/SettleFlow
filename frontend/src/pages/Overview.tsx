@@ -9,9 +9,10 @@ const NOTE_TONE: Record<string, string> = { SETTLED: 'good', FAILED: 'bad', REVI
 
 export function Overview({ onSelect, tick, onCreated }: { onSelect: (id: string) => void; tick: number; onCreated: () => void }) {
   const me = useSession();
-  const { data: stats } = usePolling(api.stats, 2000, [tick]);
-  const { data: recent } = usePolling(() => api.payments({ pageSize: 10 }), 2000, [tick]);
-  const { data: notes } = usePolling(() => api.notifications(8), 2500, [tick]);
+  // Live events bump `tick` instantly; polling is just a safety net now.
+  const { data: stats } = usePolling(api.stats, 10000, [tick]);
+  const { data: recent } = usePolling(() => api.payments({ pageSize: 10 }), 10000, [tick]);
+  const { data: notes } = usePolling(() => api.notifications(8), 10000, [tick]);
 
   const s = stats?.byStatus;
   const inFlight = (s?.PendingFraud ?? 0) + (s?.FraudApproved ?? 0);

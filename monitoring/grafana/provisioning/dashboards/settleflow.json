@@ -6,12 +6,25 @@
  ],
  "timezone": "browser",
  "schemaVersion": 39,
- "refresh": "5s",
+ "refresh": "10s",
  "time": {
-  "from": "now-30m",
+  "from": "now-1h",
   "to": "now"
  },
  "panels": [
+  {
+   "type": "row",
+   "title": "Throughput",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 1
+   },
+   "panels": [],
+   "id": 1
+  },
   {
    "type": "stat",
    "title": "Payments / min",
@@ -21,7 +34,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 0,
+    "y": 1,
     "w": 4,
     "h": 4
    },
@@ -52,9 +65,10 @@
      ]
     },
     "colorMode": "value",
-    "graphMode": "area"
+    "graphMode": "area",
+    "textMode": "value"
    },
-   "id": 1
+   "id": 2
   },
   {
    "type": "stat",
@@ -65,7 +79,7 @@
    },
    "gridPos": {
     "x": 4,
-    "y": 0,
+    "y": 1,
     "w": 4,
     "h": 4
    },
@@ -96,26 +110,27 @@
      ]
     },
     "colorMode": "value",
-    "graphMode": "area"
+    "graphMode": "area",
+    "textMode": "value"
    },
-   "id": 2
+   "id": 3
   },
   {
    "type": "stat",
-   "title": "Fraud declines (1h)",
+   "title": "Time to settle p95",
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
    },
    "gridPos": {
     "x": 8,
-    "y": 0,
+    "y": 1,
     "w": 4,
     "h": 4
    },
    "targets": [
     {
-     "expr": "sum(increase(settleflow_fraud_decisions_total{decision=\"DECLINED\"}[1h]))",
+     "expr": "slo:time_to_settle:p95_5m",
      "refId": "A",
      "datasource": {
       "type": "prometheus",
@@ -125,10 +140,26 @@
    ],
    "fieldConfig": {
     "defaults": {
-     "unit": "short",
+     "unit": "s",
      "color": {
-      "mode": "fixed",
-      "fixedColor": "red"
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 5
+       },
+       {
+        "color": "red",
+        "value": 10
+       }
+      ]
      }
     },
     "overrides": []
@@ -140,9 +171,10 @@
      ]
     },
     "colorMode": "value",
-    "graphMode": "area"
+    "graphMode": "area",
+    "textMode": "value"
    },
-   "id": 3
+   "id": 4
   },
   {
    "type": "stat",
@@ -153,7 +185,7 @@
    },
    "gridPos": {
     "x": 12,
-    "y": 0,
+    "y": 1,
     "w": 4,
     "h": 4
    },
@@ -171,8 +203,24 @@
     "defaults": {
      "unit": "short",
      "color": {
-      "mode": "fixed",
-      "fixedColor": "orange"
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 20
+       },
+       {
+        "color": "red",
+        "value": 100
+       }
+      ]
      }
     },
     "overrides": []
@@ -184,9 +232,71 @@
      ]
     },
     "colorMode": "value",
-    "graphMode": "area"
+    "graphMode": "area",
+    "textMode": "value"
    },
-   "id": 4
+   "id": 5
+  },
+  {
+   "type": "stat",
+   "title": "Consumer lag",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 1,
+    "w": 4,
+    "h": 4
+   },
+   "targets": [
+    {
+     "expr": "sum(settleflow_consumer_lag)",
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 100
+       },
+       {
+        "color": "red",
+        "value": 500
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    },
+    "colorMode": "value",
+    "graphMode": "area",
+    "textMode": "value"
+   },
+   "id": 6
   },
   {
    "type": "stat",
@@ -196,8 +306,8 @@
     "uid": "prometheus"
    },
    "gridPos": {
-    "x": 16,
-    "y": 0,
+    "x": 20,
+    "y": 1,
     "w": 4,
     "h": 4
    },
@@ -215,8 +325,20 @@
     "defaults": {
      "unit": "short",
      "color": {
-      "mode": "fixed",
-      "fixedColor": "red"
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
      }
     },
     "overrides": []
@@ -228,53 +350,10 @@
      ]
     },
     "colorMode": "value",
-    "graphMode": "area"
+    "graphMode": "area",
+    "textMode": "value"
    },
-   "id": 5
-  },
-  {
-   "type": "stat",
-   "title": "Handler p95",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "prometheus"
-   },
-   "gridPos": {
-    "x": 20,
-    "y": 0,
-    "w": 4,
-    "h": 4
-   },
-   "targets": [
-    {
-     "expr": "histogram_quantile(0.95, sum by (le) (rate(settleflow_events_handler_duration_milliseconds_bucket[5m])))",
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prometheus"
-     }
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "unit": "ms",
-     "color": {
-      "mode": "fixed",
-      "fixedColor": "purple"
-     }
-    },
-    "overrides": []
-   },
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ]
-    },
-    "colorMode": "value",
-    "graphMode": "area"
-   },
-   "id": 6
+   "id": 7
   },
   {
    "type": "timeseries",
@@ -285,8 +364,8 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 4,
-    "w": 12,
+    "y": 5,
+    "w": 8,
     "h": 8
    },
    "targets": [
@@ -304,55 +383,7 @@
     "defaults": {
      "unit": "short",
      "custom": {
-      "fillOpacity": 15,
-      "lineWidth": 2,
-      "stacking": {
-       "mode": "normal"
-      }
-     }
-    },
-    "overrides": []
-   },
-   "options": {
-    "legend": {
-     "displayMode": "list",
-     "placement": "bottom"
-    },
-    "tooltip": {
-     "mode": "multi"
-    }
-   },
-   "id": 7
-  },
-  {
-   "type": "timeseries",
-   "title": "Settlement outcomes / min",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "prometheus"
-   },
-   "gridPos": {
-    "x": 12,
-    "y": 4,
-    "w": 12,
-    "h": 8
-   },
-   "targets": [
-    {
-     "expr": "sum by (outcome) (rate(settleflow_settlements_total[1m]))*60",
-     "legendFormat": "{{outcome}}",
-     "refId": "A",
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prometheus"
-     }
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {
-     "unit": "short",
-     "custom": {
-      "fillOpacity": 15,
+      "fillOpacity": 12,
       "lineWidth": 2,
       "stacking": {
        "mode": "normal"
@@ -374,21 +405,21 @@
   },
   {
    "type": "timeseries",
-   "title": "Events processed / sec by consumer",
+   "title": "Settlement outcomes / min",
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
    },
    "gridPos": {
-    "x": 0,
-    "y": 12,
-    "w": 12,
+    "x": 8,
+    "y": 5,
+    "w": 8,
     "h": 8
    },
    "targets": [
     {
-     "expr": "sum by (consumer, outcome) (rate(settleflow_events_processed_total[1m]))",
-     "legendFormat": "{{consumer}} {{outcome}}",
+     "expr": "sum by (outcome) (rate(settleflow_settlements_total[1m]))*60",
+     "legendFormat": "{{outcome}}",
      "refId": "A",
      "datasource": {
       "type": "prometheus",
@@ -400,10 +431,10 @@
     "defaults": {
      "unit": "short",
      "custom": {
-      "fillOpacity": 15,
+      "fillOpacity": 12,
       "lineWidth": 2,
       "stacking": {
-       "mode": "none"
+       "mode": "normal"
       }
      }
     },
@@ -422,21 +453,21 @@
   },
   {
    "type": "timeseries",
-   "title": "Handler latency",
+   "title": "Time to settle (created \u2192 settled)",
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
    },
    "gridPos": {
-    "x": 12,
-    "y": 12,
-    "w": 12,
+    "x": 16,
+    "y": 5,
+    "w": 8,
     "h": 8
    },
    "targets": [
     {
-     "expr": "histogram_quantile(0.5, sum by (le, consumer) (rate(settleflow_events_handler_duration_milliseconds_bucket[5m])))",
-     "legendFormat": "p50 {{consumer}}",
+     "expr": "histogram_quantile(0.5, sum by (le) (rate(settleflow_payment_time_to_settle_seconds_bucket[5m])))",
+     "legendFormat": "p50",
      "refId": "A",
      "datasource": {
       "type": "prometheus",
@@ -444,9 +475,18 @@
      }
     },
     {
-     "expr": "histogram_quantile(0.95, sum by (le, consumer) (rate(settleflow_events_handler_duration_milliseconds_bucket[5m])))",
-     "legendFormat": "p95 {{consumer}}",
+     "expr": "histogram_quantile(0.95, sum by (le) (rate(settleflow_payment_time_to_settle_seconds_bucket[5m])))",
+     "legendFormat": "p95",
      "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     }
+    },
+    {
+     "expr": "histogram_quantile(0.99, sum by (le) (rate(settleflow_payment_time_to_settle_seconds_bucket[5m])))",
+     "legendFormat": "p99",
+     "refId": "C",
      "datasource": {
       "type": "prometheus",
       "uid": "prometheus"
@@ -455,9 +495,9 @@
    ],
    "fieldConfig": {
     "defaults": {
-     "unit": "ms",
+     "unit": "s",
      "custom": {
-      "fillOpacity": 15,
+      "fillOpacity": 12,
       "lineWidth": 2,
       "stacking": {
        "mode": "none"
@@ -478,6 +518,390 @@
    "id": 10
   },
   {
+   "type": "row",
+   "title": "Kafka consumers",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 13,
+    "w": 24,
+    "h": 1
+   },
+   "panels": [],
+   "id": 11
+  },
+  {
+   "type": "timeseries",
+   "title": "Consumer lag by consumer",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 14,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "expr": "sum by (consumer) (settleflow_consumer_lag)",
+     "legendFormat": "{{consumer}}",
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "fillOpacity": 12,
+      "lineWidth": 2,
+      "stacking": {
+       "mode": "none"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "id": 12
+  },
+  {
+   "type": "timeseries",
+   "title": "Events processed / sec",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 14,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "expr": "sum by (consumer, outcome) (rate(settleflow_events_processed_total[1m]))",
+     "legendFormat": "{{consumer}} {{outcome}}",
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "fillOpacity": 12,
+      "lineWidth": 2,
+      "stacking": {
+       "mode": "none"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "id": 13
+  },
+  {
+   "type": "timeseries",
+   "title": "Handler latency p95",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 14,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "expr": "histogram_quantile(0.95, sum by (le, consumer) (rate(settleflow_events_handler_duration_milliseconds_bucket[5m])))",
+     "legendFormat": "{{consumer}}",
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "custom": {
+      "fillOpacity": 12,
+      "lineWidth": 2,
+      "stacking": {
+       "mode": "none"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "id": 14
+  },
+  {
+   "type": "row",
+   "title": "Money & merchants",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 22,
+    "w": 24,
+    "h": 1
+   },
+   "panels": [],
+   "id": 15
+  },
+  {
+   "type": "timeseries",
+   "title": "Refunds / min",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 23,
+    "w": 6,
+    "h": 8
+   },
+   "targets": [
+    {
+     "expr": "sum by (outcome) (rate(settleflow_refunds_total[5m]))*60",
+     "legendFormat": "{{outcome}}",
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "fillOpacity": 12,
+      "lineWidth": 2,
+      "stacking": {
+       "mode": "normal"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "id": 16
+  },
+  {
+   "type": "timeseries",
+   "title": "Webhook deliveries / min",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 6,
+    "y": 23,
+    "w": 6,
+    "h": 8
+   },
+   "targets": [
+    {
+     "expr": "sum by (outcome) (rate(settleflow_webhooks_deliveries_total[5m]))*60",
+     "legendFormat": "{{outcome}}",
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "fillOpacity": 12,
+      "lineWidth": 2,
+      "stacking": {
+       "mode": "normal"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "id": 17
+  },
+  {
+   "type": "timeseries",
+   "title": "Acquirer circuit breakers (1 = open)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 23,
+    "w": 6,
+    "h": 8
+   },
+   "targets": [
+    {
+     "expr": "max by (merchant) (settleflow_acquirer_circuit_open)",
+     "legendFormat": "{{merchant}}",
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "fillOpacity": 12,
+      "lineWidth": 2,
+      "stacking": {
+       "mode": "none"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "id": 18
+  },
+  {
+   "type": "timeseries",
+   "title": "Payouts & reconciliation",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 18,
+    "y": 23,
+    "w": 6,
+    "h": 8
+   },
+   "targets": [
+    {
+     "expr": "sum(increase(settleflow_payouts_total[1h]))",
+     "legendFormat": "payouts (1h)",
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     }
+    },
+    {
+     "expr": "max(settleflow_reconciliation_discrepancies)",
+     "legendFormat": "open discrepancies",
+     "refId": "B",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "fillOpacity": 12,
+      "lineWidth": 2,
+      "stacking": {
+       "mode": "none"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom"
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "id": 19
+  },
+  {
+   "type": "row",
+   "title": "Platform",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 31,
+    "w": 24,
+    "h": 1
+   },
+   "panels": [],
+   "id": 20
+  },
+  {
    "type": "timeseries",
    "title": "Outbox: published vs failed / sec",
    "datasource": {
@@ -486,14 +910,14 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 20,
+    "y": 32,
     "w": 12,
     "h": 8
    },
    "targets": [
     {
      "expr": "sum by (topic) (rate(settleflow_outbox_published_total[1m]))",
-     "legendFormat": "published {{topic}}",
+     "legendFormat": "{{topic}}",
      "refId": "A",
      "datasource": {
       "type": "prometheus",
@@ -514,7 +938,7 @@
     "defaults": {
      "unit": "short",
      "custom": {
-      "fillOpacity": 15,
+      "fillOpacity": 12,
       "lineWidth": 2,
       "stacking": {
        "mode": "none"
@@ -532,7 +956,7 @@
      "mode": "multi"
     }
    },
-   "id": 11
+   "id": 21
   },
   {
    "type": "timeseries",
@@ -543,13 +967,13 @@
    },
    "gridPos": {
     "x": 12,
-    "y": 20,
+    "y": 32,
     "w": 12,
     "h": 8
    },
    "targets": [
     {
-     "expr": "histogram_quantile(0.95, sum by (le, http_route) (rate(http_server_request_duration_seconds_bucket[5m])))",
+     "expr": "histogram_quantile(0.95, sum by (le, http_route) (rate(http_server_request_duration_seconds_bucket{service=\"api\", http_route=~\"/api/.*\"}[5m])))",
      "legendFormat": "{{http_route}}",
      "refId": "A",
      "datasource": {
@@ -562,7 +986,7 @@
     "defaults": {
      "unit": "s",
      "custom": {
-      "fillOpacity": 15,
+      "fillOpacity": 12,
       "lineWidth": 2,
       "stacking": {
        "mode": "none"
@@ -580,7 +1004,38 @@
      "mode": "multi"
     }
    },
-   "id": 12
+   "id": 22
+  },
+  {
+   "type": "logs",
+   "title": "Warnings & errors (all services) \u2014 expand a line and click TraceId to open the trace",
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 40,
+    "w": 24,
+    "h": 10
+   },
+   "targets": [
+    {
+     "expr": "{service=~\".+\"} |~ \"\\\"level\\\":\\\"(warning|error|fatal)\\\"|\\\"level\\\":\\\"(Warning|Error|Fatal)\\\"\"",
+     "refId": "A",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     }
+    }
+   ],
+   "options": {
+    "showTime": true,
+    "wrapLogMessage": true,
+    "sortOrder": "Descending",
+    "enableLogDetails": true
+   },
+   "id": 23
   }
  ]
 }

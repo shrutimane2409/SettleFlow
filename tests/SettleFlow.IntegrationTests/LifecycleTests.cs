@@ -183,7 +183,7 @@ public sealed class LifecycleTests(SettleFlowFixture f)
     [Fact]
     public async Task Slow_acquirer_times_out_and_is_dead_lettered()
     {
-        await f.CreateMerchantAsync("merchant_slow");
+        await f.EnsureMerchantAsync("merchant_slow");
         var p = await CreateAsync(NewPayment(merchant: "merchant_slow"));
 
         var dl = await f.EventuallyAsync(

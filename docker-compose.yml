@@ -4,7 +4,8 @@
 #   Kafka UI    http://localhost:8082
 #   Jaeger      http://localhost:16686
 #   Prometheus  http://localhost:9090
-#   Grafana     http://localhost:3001  (anonymous viewer; admin/admin)
+#   Grafana     http://localhost:3001  (anonymous viewer; admin/admin): metrics, SLOs, logs (Loki)
+#   Alertmanager http://localhost:9093
 #
 # Secrets come from a .env file next to this one (see .env.example). The ${VAR:-default}
 # fallbacks are for local demos only: set real values before exposing the stack anywhere.
@@ -13,6 +14,7 @@ x-dotnet-env: &dotnet-env
   ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=settleflow;Username=settleflow;Password=${POSTGRES_PASSWORD:-settleflow}
   Kafka__BootstrapServers: redpanda:9092
   OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+  Loki__Url: http://loki:3100
 
 x-dotnet-service: &dotnet-service
   restart: unless-stopped
@@ -131,9 +133,21 @@ services:
 
   prometheus:
     image: prom/prometheus:v3.5.0
-    volumes: ["./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    volumes:
+      - "./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+      - "./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro"
     ports: ["9090:9090"]
-    depends_on: [api]
+    depends_on: [api, alertmanager]
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    volumes: ["./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro"]
+    ports: ["9093:9093"]
+
+  loki:
+    image: grafana/loki:3.5.3
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    ports: ["3100:3100"]
 
   grafana:
     image: grafana/grafana:12.1.1
@@ -146,7 +160,7 @@ services:
     volumes:
       - "./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro"
       - grafana_data:/var/lib/grafana
-    depends_on: [prometheus]
+    depends_on: [prometheus, loki]
 
 volumes:
   postgres_data:

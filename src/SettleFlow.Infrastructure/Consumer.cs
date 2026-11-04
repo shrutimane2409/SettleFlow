@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Threading.Channels;
 using System.Text.Json;
 using Confluent.Kafka;
 using Microsoft.EntityFrameworkCore;
@@ -37,6 +39,12 @@ public abstract class PaymentEventWorker<T>(
         // Consume() blocks; run the loop on its own thread so host startup isn't held up.
         Task.Factory.StartNew(() => RunAsync(stoppingToken), stoppingToken, TaskCreationOptions.LongRunning, TaskScheduler.Default).Unwrap();
 
+    /// <summary>
+    /// Poll loop + one sequential "lane" per assigned partition. Partitions are processed in parallel
+    /// (throughput scales with partition count), while each partition, and therefore each payment, stays in order.
+    /// The Kafka consumer is not thread-safe, so lanes never touch it: they report finished offsets
+    /// back to this loop, which stores them.
+    /// </summary>
     private async Task RunAsync(CancellationToken stoppingToken)
     {
         var cfg = new ConsumerConfig
@@ -49,20 +57,51 @@ public abstract class PaymentEventWorker<T>(
             PartitionAssignmentStrategy = PartitionAssignmentStrategy.CooperativeSticky
         };
 
+        var lanes = new Dictionary<TopicPartition, PartitionLane>();
+        var completed = new ConcurrentQueue<TopicPartitionOffset>();
+        IConsumer<string, string>? consumerRef = null;
+
+        void StoreCompleted()
+        {
+            while (completed.TryDequeue(out var tpo))
+            {
+                try { consumerRef!.StoreOffset(tpo); }
+                catch (KafkaException) { /* partition no longer assigned: the next owner re-reads, the inbox dedups */ }
+            }
+        }
+
+        // Called on rebalance (inside Consume): let revoked partitions finish their in-flight work and
+        // store offsets before they're handed to another instance.
+        void StopLanes(IEnumerable<TopicPartition> partitions)
+        {
+            foreach (var tp in partitions)
+            {
+                if (!lanes.Remove(tp, out var lane)) continue;
+                lane.Complete();
+                lane.WaitForDrain(TimeSpan.FromSeconds(30));
+            }
+            StoreCompleted();
+        }
+
         using var consumer = new ConsumerBuilder<string, string>(cfg)
             .SetErrorHandler((_, e) => logger.LogWarning("Kafka error in {Consumer}: {Reason}", ConsumerName, e.Reason))
+            .SetPartitionsRevokedHandler((_, revoked) => StopLanes(revoked.Select(r => r.TopicPartition)))
+            .SetPartitionsLostHandler((_, lost) => StopLanes(lost.Select(r => r.TopicPartition)))
             .Build();
+        consumerRef = consumer;
         consumer.Subscribe(topic);
         logger.LogInformation("{Consumer} subscribed to {Topic}", ConsumerName, topic);
 
+        var lastLag = DateTime.MinValue;
         try
         {
             while (!stoppingToken.IsCancellationRequested)
             {
-                ConsumeResult<string, string> result;
+                ConsumeResult<string, string>? result;
                 try
                 {
-                    result = consumer.Consume(stoppingToken);
+                    // Short timeout so finished offsets are stored promptly even when the topic is idle.
+                    result = consumer.Consume(TimeSpan.FromMilliseconds(100));
                 }
                 catch (ConsumeException ex)
                 {
@@ -71,16 +110,71 @@ public abstract class PaymentEventWorker<T>(
                     continue;
                 }
 
-                if (result?.Message is null) continue;
+                StoreCompleted();
 
-                await ProcessAsync(result, stoppingToken);
-                consumer.StoreOffset(result);
+                if (result?.Message is not null)
+                {
+                    if (!lanes.TryGetValue(result.TopicPartition, out var lane))
+                        lanes[result.TopicPartition] = lane = new PartitionLane(r => ProcessAsync(r, stoppingToken), completed, stoppingToken);
+                    await lane.EnqueueAsync(result, stoppingToken); // bounded: back-pressure when a partition falls behind
+                }
+
+                if (DateTime.UtcNow - lastLag > TimeSpan.FromSeconds(1))
+                {
+                    RecordLag(consumer);
+                    lastLag = DateTime.UtcNow;
+                }
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
         finally
         {
+            foreach (var lane in lanes.Values) lane.Complete();
+            foreach (var lane in lanes.Values) lane.WaitForDrain(TimeSpan.FromSeconds(10));
+            StoreCompleted();
             consumer.Close();
+        }
+    }
+
+    /// <summary>Lag from locally cached watermarks: no broker round trip.</summary>
+    private void RecordLag(IConsumer<string, string> consumer)
+    {
+        foreach (var tp in consumer.Assignment)
+        {
+            var watermarks = consumer.GetWatermarkOffsets(tp);
+            var position = consumer.Position(tp);
+            if (watermarks.High.Value >= 0 && position.Value >= 0)
+                SettleFlowTelemetry.SetConsumerLag(ConsumerName, tp.Topic, tp.Partition.Value, watermarks.High.Value - position.Value);
+        }
+    }
+
+    /// <summary>Sequential worker for one partition.</summary>
+    private sealed class PartitionLane
+    {
+        private readonly Channel<ConsumeResult<string, string>> _queue =
+            Channel.CreateBounded<ConsumeResult<string, string>>(new BoundedChannelOptions(100) { SingleReader = true, SingleWriter = true });
+        private readonly Task _worker;
+
+        public PartitionLane(Func<ConsumeResult<string, string>, Task> process, ConcurrentQueue<TopicPartitionOffset> completed, CancellationToken ct)
+        {
+            _worker = Task.Run(async () =>
+            {
+                await foreach (var r in _queue.Reader.ReadAllAsync(ct))
+                {
+                    await process(r);
+                    completed.Enqueue(new TopicPartitionOffset(r.TopicPartition, r.Offset + 1));
+                }
+            }, ct);
+        }
+
+        public ValueTask EnqueueAsync(ConsumeResult<string, string> r, CancellationToken ct) => _queue.Writer.WriteAsync(r, ct);
+
+        public void Complete() => _queue.Writer.TryComplete();
+
+        public void WaitForDrain(TimeSpan timeout)
+        {
+            try { _worker.Wait(timeout); }
+            catch (AggregateException) { /* cancelled on shutdown: unfinished messages are redelivered */ }
         }
     }
 
@@ -113,6 +207,7 @@ public abstract class PaymentEventWorker<T>(
 
         var attempts = 0;
         var transientWaits = 0;
+        var circuitWaits = 0;
         while (true)
         {
             var sw = Stopwatch.StartNew();
@@ -131,12 +226,22 @@ public abstract class PaymentEventWorker<T>(
                 Record("transient_error", sw);
                 await Task.Delay(delay, ct);
             }
+            catch (Polly.CircuitBreaker.BrokenCircuitException ex) when (circuitWaits < options.Value.MaxCircuitWaits)
+            {
+                // The dependency is known-bad and failing fast. Retrying now would only burn attempts inside the
+                // break window, so pause this lane (other partitions keep going) and let the breaker recover.
+                circuitWaits++;
+                Record("circuit_open", sw);
+                logger.LogWarning("{Consumer}: circuit open ({Message}); pausing {Delay} (wait {Wait}/{Max})",
+                    ConsumerName, ex.Message, options.Value.CircuitOpenWait, circuitWaits, options.Value.MaxCircuitWaits);
+                await Task.Delay(options.Value.CircuitOpenWait, ct);
+            }
             catch (Exception ex)
             {
                 attempts++;
                 Record("error", sw);
                 activity?.AddException(ex);
-                if (attempts >= options.Value.MaxHandlerAttempts)
+                if (attempts >= options.Value.MaxHandlerAttempts || ex is Polly.CircuitBreaker.BrokenCircuitException)
                 {
                     logger.LogError(ex, "{Consumer} gave up after {Attempts} attempts; dead-lettering", ConsumerName, attempts);
                     await DeadLetterAsync(result, ex, attempts, ct, eventId);

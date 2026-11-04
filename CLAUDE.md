@@ -50,6 +50,7 @@ settlement.completed / payments.failed → notification workers → notification
 ### Key patterns
 - **Emit events only through the outbox**: call `db.Enqueue(topic, key, data)` inside the handler and never produce to Kafka directly. `db.RecordTimeline(...)` adds a timeline entry. Every service runs `OutboxPublisher`, which claims rows with `FOR UPDATE SKIP LOCKED` and publishes a row only when no earlier unpublished row has the same (Topic, Key).
 - **New consumer**: subclass `PaymentEventWorker<T>` and implement `HandleAsync(envelope, db, ct)`, which mutates `db` without calling `SaveChanges`. The base class handles inbox dedup keyed by `(Consumer = class name, EventId)`, retries, transient-error waits, dead-lettering and offset storage. **Renaming a handler class changes its inbox key and its consumer group** (`{Kafka:GroupId}.{ClassName}`).
+- **Concurrency model**: each consumer runs one sequential *lane per assigned partition*, and lanes run in parallel. So a handler instance may run concurrently for **different payments**, but never for two events of the same payment on the same topic (same key → same partition). Only the poll loop touches the Kafka consumer; lanes report finished offsets back to it. `Kafka:TopicPartitions` (default 12) caps parallelism, and startup grows existing topics to it.
 - **Handlers must be idempotent on state**: check the payment's current `Status` before acting.
 - **Exceptions**: throw for retryable or business failures. After `MaxHandlerAttempts` the message goes to `DeadLetters` and `payments.dlq`. Infrastructure errors (`IsTransient`) retry forever.
 - `Payment.Version` maps to `xmin` (optimistic concurrency). `Status` is stored as a string.
@@ -67,6 +68,14 @@ settlement.completed / payments.failed → notification workers → notification
 - Ledger tables are append-only (DB triggers). Never update or delete; post a reversing transaction instead.
 - `PayoutService` and `ReconciliationService` (in `Finance.cs`) are hosted in the API, each run is single-instance via a Postgres advisory lock, and both are callable on demand from the API. Tests disable the schedules (`Payouts:Enabled=false`, `Reconciliation:Enabled=false`, `Reconciliation:Grace=0`) and call the endpoints.
 - `AcquirerTransactions` is "the bank's" data: reconciliation treats it as the external source of truth, and tests tamper with it via SQL to create discrepancies.
+
+### Observability & real-time (Phase 4)
+- `PostgresListener.ListenAsync` (LISTEN with reconnect) is woken by triggers (`settleflow_outbox`, `settleflow_payments`; migration `RealtimeNotifications`). `OutboxPublisher` waits on NOTIFY, with `Outbox:PollInterval` as the fallback (5 s in tests on purpose).
+- Live stream: `PaymentChangeFeed` (one LISTEN per API instance, fan-out) → `GET /api/stream` (SSE via `TypedResults.ServerSentEvents`). Auth uses a 60 s token with the `settleflow-stream` audience from `POST /api/stream/token`. `OnTokenValidated` enforces that stream tokens only work on the stream, and that the stream only accepts stream tokens.
+- New metrics: `settleflow.consumer.lag` (computed per message from cached watermarks), `settleflow.payment.time_to_settle` (explicit buckets via `AddView`). Prometheus 3 stores `le` as `"10.0"`, so match buckets with `le=~"10(\\.0)?"`. Error-ratio rules need `or vector(0)`, otherwise "no errors" shows as "no data".
+- Alert/SLO rules live in `monitoring/alerts.yml` (CI validates them with promtool). Dashboards are generated JSON in `monitoring/grafana/provisioning/dashboards/`.
+- `Database:MigrateOnStartup=false` makes services wait for migrations; `dotnet SettleFlow.Api.dll --migrate-only` migrates, seeds, and exits (the Helm Job).
+- Loki shipping is on when `Loki:Url` is set; `TraceContextEnricher` adds TraceId/SpanId to every log event.
 
 ### Demo hooks (`SettlementOptions`)
 `merchant_outage` always throws (circuit opens, then the DLQ). `merchant_slow` exceeds the timeout. `blocked_*` merchants are declined, and only EUR/GBP/USD are supported. Random transient failures run at `TransientFailureRate` (set to 0 in the integration tests).

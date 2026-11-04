@@ -245,3 +245,12 @@ button.mini-row { background: none; color: inherit; text-align: left; width: 100
 .dlq-item.resolved { opacity: .6; background: rgba(18, 26, 40, .4); border-color: var(--line); }
 .empty svg { vertical-align: -3px; color: var(--good); }
 @media (max-width: 1300px) { .finance-grid { grid-template-columns: 1fr; } }
+
+/* ---------- live ---------- */
+.header-actions { display: flex; gap: 10px; align-items: center; }
+.live-badge { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); padding: 6px 10px; border: 1px solid var(--line); border-radius: 20px; }
+.live-badge i { width: 7px; height: 7px; border-radius: 50%; background: #4b5d79; }
+.live-badge.live { color: var(--good); border-color: #1f5a39; }
+.live-badge.live i { background: var(--good); animation: pulse 1.6s infinite; }
+.live-badge.offline { color: var(--warn); }
+.live-badge.offline i { background: var(--warn); }

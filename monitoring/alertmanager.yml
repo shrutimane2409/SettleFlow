@@ -1,0 +1,28 @@
+# Routes all alerts to the local demo receiver (see: docker compose logs -f webhook-receiver).
+# For Slack, add a receiver like:
+#   - name: slack
+#     slack_configs:
+#       - api_url: https://hooks.slack.com/services/XXX
+#         channel: '#payments-alerts'
+#         send_resolved: true
+route:
+  receiver: demo-webhook
+  group_by: [alertname, severity]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: [severity="page"]
+      receiver: demo-webhook
+      group_wait: 10s
+
+receivers:
+  - name: demo-webhook
+    webhook_configs:
+      - url: http://webhook-receiver:8080/alertmanager
+        send_resolved: true
+
+inhibit_rules:
+  # If a service is down, don't also alert on everything downstream of it.
+  - source_matchers: [alertname="ServiceDown"]
+    target_matchers: [severity="warning"]

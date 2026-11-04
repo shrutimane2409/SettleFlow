@@ -33,8 +33,25 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+  config:
+    name: Monitoring & deployment config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Prometheus alert & SLO rules
+        run: docker run --rm --entrypoint promtool -v "$PWD/monitoring:/m" prom/prometheus:v3.5.0 check rules /m/alerts.yml
+      - name: Validate Alertmanager config
+        run: docker run --rm --entrypoint amtool -v "$PWD/monitoring:/m" prom/alertmanager:v0.28.1 check-config /m/alertmanager.yml
+      - uses: azure/setup-helm@v4
+      - name: Lint and render the Helm chart
+        run: |
+          helm lint helm/settleflow
+          helm template t helm/settleflow --set keda.enabled=true > /dev/null
+      - name: Validate docker compose
+        run: docker compose config -q
+
   images:
-    needs: [backend, frontend]
+    needs: [backend, frontend, config]
     runs-on: ubuntu-latest
     permissions: { contents: read, packages: write }
     strategy:

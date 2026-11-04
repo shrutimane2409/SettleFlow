@@ -1,0 +1,48 @@
+{{- range $name, $svc := .Values.services }}
+{{- if gt (int ($svc.pdbMinAvailable | default 0)) 0 }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $.Release.Name }}-{{ $name }}
+spec:
+  minAvailable: {{ $svc.pdbMinAvailable }}
+  selector: { matchLabels: { app: {{ $name }}, app.kubernetes.io/instance: {{ $.Release.Name }} } }
+{{- end }}
+{{- if and $svc.hpa $svc.hpa.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $.Release.Name }}-{{ $name }}
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: {{ $.Release.Name }}-{{ $name }} }
+  minReplicas: {{ $svc.hpa.minReplicas }}
+  maxReplicas: {{ $svc.hpa.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: {{ $svc.hpa.cpuUtilization }} } }
+{{- end }}
+{{- if and $.Values.keda.enabled $svc.consumers }}
+---
+# Scale on queued work (Kafka consumer lag), not CPU. Replicas beyond the partition count can't help,
+# so keep maxReplicas <= Kafka:TopicPartitions.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ $.Release.Name }}-{{ $name }}
+spec:
+  scaleTargetRef: { name: {{ $.Release.Name }}-{{ $name }} }
+  minReplicaCount: {{ $svc.replicas }}
+  maxReplicaCount: {{ $.Values.keda.maxReplicas }}
+  triggers:
+    {{- range $svc.consumers }}
+    - type: kafka
+      metadata:
+        bootstrapServers: {{ $.Values.kafka.bootstrapServers }}
+        consumerGroup: {{ .group }}
+        topic: {{ .topic }}
+        lagThreshold: {{ $.Values.keda.lagThreshold | quote }}
+    {{- end }}
+{{- end }}
+{{- end }}

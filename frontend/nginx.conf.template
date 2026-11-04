@@ -21,6 +21,12 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        # The API sets its own security headers; drop them so each header appears once (nginx adds the dashboard's).
+        proxy_hide_header Content-Security-Policy;
+        proxy_hide_header X-Frame-Options;
+        proxy_hide_header X-Content-Type-Options;
+        proxy_hide_header Referrer-Policy;
+        proxy_hide_header Permissions-Policy;
         # Live event stream (Server-Sent Events): don't buffer.
         proxy_buffering off;
         proxy_read_timeout 1h;
@@ -28,6 +34,12 @@ server {
 
     location /health {
         proxy_pass $api_upstream;
+        # The API sets its own security headers; drop them so each header appears once (nginx adds the dashboard's).
+        proxy_hide_header Content-Security-Policy;
+        proxy_hide_header X-Frame-Options;
+        proxy_hide_header X-Content-Type-Options;
+        proxy_hide_header Referrer-Policy;
+        proxy_hide_header Permissions-Policy;
     }
 
     # Hashed build assets can be cached forever.

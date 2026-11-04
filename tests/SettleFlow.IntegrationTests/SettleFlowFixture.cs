@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Collections.Concurrent;
+using System.Net;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -58,7 +59,8 @@ public sealed class SettleFlowFixture : IAsyncLifetime
         ["Kafka:MaxHandlerAttempts"] = "2",
         ["Settlement:TransientFailureRate"] = "0",
         ["Settlement:MaxLatencyMs"] = "0",
-        ["Outbox:PollInterval"] = "00:00:00.050",
+        // Deliberately slow fallback poll: the pipeline must be driven by Postgres NOTIFY to be fast.
+        ["Outbox:PollInterval"] = "00:00:05",
         ["RateLimiting:PaymentsPerWindow"] = "10000",
         ["RateLimiting:LoginsPerMinute"] = "10000",
         ["Auth:JwtSigningKey"] = "integration-tests-signing-key-0123456789abcdef",
@@ -150,6 +152,13 @@ public sealed class SettleFlowFixture : IAsyncLifetime
         var client = _api!.CreateClient();
         client.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
         return client;
+    }
+
+    /// <summary>Creates a merchant with a fixed id if it doesn't exist yet (for well-known demo merchants).</summary>
+    public async Task EnsureMerchantAsync(string id)
+    {
+        var response = await Client.PostAsJsonAsync("/api/merchants", new { id, name = $"Test {id}" });
+        if (response.StatusCode != HttpStatusCode.Conflict) response.EnsureSuccessStatusCode();
     }
 
     /// <summary>Creates a merchant (as admin) and returns its one-time API key.</summary>
