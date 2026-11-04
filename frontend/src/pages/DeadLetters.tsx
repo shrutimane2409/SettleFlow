@@ -26,27 +26,49 @@ export function DeadLetters({ onSelect }: { onSelect: (id: string) => void }) {
   };
 
   return (
-    <Card title="Dead-letter queue" className="wide"
-      aside={<label className="toggle"><input type="checkbox" checked={showReplayed} onChange={e => setShowReplayed(e.target.checked)} /> show replayed</label>}>
+    <Card
+      title="Dead-letter queue"
+      className="wide"
+      aside={
+        <label className="toggle">
+          <input type="checkbox" checked={showReplayed} onChange={e => setShowReplayed(e.target.checked)} /> show replayed
+        </label>
+      }
+    >
       <p className="muted">
-        Messages a consumer could not process after all retries. Fix the cause, then replay to re-deliver the original
-        event to that consumer only (others skip it thanks to the inbox).
+        Messages a consumer could not process after all retries. Fix the cause, then replay to re-deliver the original event to that
+        consumer only (others skip it thanks to the inbox).
       </p>
       {error && <p className="form-msg error">{error}</p>}
-      {(data ?? []).length === 0 ? <Empty>The dead-letter queue is empty. Try the “Acquirer outage” scenario.</Empty> : (
+      {(data ?? []).length === 0 ? (
+        <Empty>The dead-letter queue is empty. Try the “Acquirer outage” scenario.</Empty>
+      ) : (
         <div className="dlq">
           {data!.map(d => (
             <div key={d.id} className="dlq-item">
               <div className="dlq-main">
-                <div><b>{d.consumer}</b> <span className="chip">{d.topic}</span> <small className="muted-text">p{d.partition}@{d.offset} · {d.attempts} attempts · {timeAgo(d.createdAt)}</small></div>
+                <div>
+                  <b>{d.consumer}</b> <span className="chip">{d.topic}</span>{' '}
+                  <small className="muted-text">
+                    p{d.partition}@{d.offset} · {d.attempts} attempts · {timeAgo(d.createdAt)}
+                  </small>
+                </div>
                 <p className="bad-text">{d.error}</p>
-                {d.key && <button className="link mono" onClick={() => onSelect(d.key!)}>payment {d.key}</button>}
+                {d.key && (
+                  <button className="link mono" onClick={() => onSelect(d.key!)}>
+                    payment {d.key}
+                  </button>
+                )}
               </div>
-              {d.replayedAt
-                ? <span className="muted-text">replayed {timeAgo(d.replayedAt)}</span>
-                : can.admin(me)
-                  ? <button disabled={busy === d.id} onClick={() => replay(d.id)}><RotateCcw size={14} /> Replay</button>
-                  : <span className="muted-text small">admin can replay</span>}
+              {d.replayedAt ? (
+                <span className="muted-text">replayed {timeAgo(d.replayedAt)}</span>
+              ) : can.admin(me) ? (
+                <button disabled={busy === d.id} onClick={() => replay(d.id)}>
+                  <RotateCcw size={14} /> Replay
+                </button>
+              ) : (
+                <span className="muted-text small">admin can replay</span>
+              )}
             </div>
           ))}
         </div>

@@ -176,14 +176,31 @@ public sealed class WebhookEnqueueWorker(IOptions<KafkaOptions> o, IServiceScope
             {
                 payment = new
                 {
-                    payment.Id, payment.Amount, payment.Currency, payment.CustomerId, payment.MerchantId,
-                    status = payment.Status.ToString(), payment.CaptureMode, payment.CapturedAmount, payment.RefundedAmount,
-                    payment.SettlementReference, payment.FailureReason, payment.CreatedAt, payment.UpdatedAt
+                    payment.Id,
+                    payment.Amount,
+                    payment.Currency,
+                    payment.CustomerId,
+                    payment.MerchantId,
+                    status = payment.Status.ToString(),
+                    payment.CaptureMode,
+                    payment.CapturedAmount,
+                    payment.RefundedAmount,
+                    payment.SettlementReference,
+                    payment.FailureReason,
+                    payment.CreatedAt,
+                    payment.UpdatedAt
                 },
                 refund = refund is null ? null : new
                 {
-                    refund.Id, refund.Amount, refund.Currency, status = refund.Status.ToString(),
-                    refund.Reason, refund.AcquirerReference, refund.FailureReason, refund.CreatedAt, refund.CompletedAt
+                    refund.Id,
+                    refund.Amount,
+                    refund.Currency,
+                    status = refund.Status.ToString(),
+                    refund.Reason,
+                    refund.AcquirerReference,
+                    refund.FailureReason,
+                    refund.CreatedAt,
+                    refund.CompletedAt
                 }
             }
         }, Json);

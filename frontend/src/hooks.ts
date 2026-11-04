@@ -44,24 +44,16 @@ export function useHashRoute(): [string, (route: string) => void] {
     window.addEventListener('hashchange', onChange);
     return () => window.removeEventListener('hashchange', onChange);
   }, []);
-  return [route, (r: string) => { window.location.hash = `/${r}`; }];
+  return [
+    route,
+    (r: string) => {
+      window.location.hash = `/${r}`;
+    },
+  ];
 }
 
-export const formatMoney = (amount: number, currency: string) => {
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(amount);
-  } catch {
-    return `${currency} ${amount.toFixed(2)}`;
-  }
-};
-
-export const timeAgo = (iso: string) => {
-  const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
-  if (s < 60) return `${s}s ago`;
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return new Date(iso).toLocaleDateString();
-};
+// Pure helpers live in format.ts (no React), re-exported here for existing imports.
+export { formatMoney, timeAgo } from './format';
 
 export type LiveState = 'connecting' | 'live' | 'offline';
 

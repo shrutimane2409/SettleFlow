@@ -10,7 +10,9 @@ export function RiskMeter({ score }: { score: number | null }) {
   const level = score >= 50 ? 'high' : score >= 25 ? 'medium' : 'low';
   return (
     <span className={`risk risk-${level}`} title={`Risk score ${score}/100`}>
-      <span className="risk-bar"><span style={{ width: `${Math.min(100, score)}%` }} /></span>
+      <span className="risk-bar">
+        <span style={{ width: `${Math.min(100, score)}%` }} />
+      </span>
       {score}
     </span>
   );
@@ -50,14 +52,20 @@ export function ThroughputChart({ data }: { data: { minute: string; count: numbe
     <div className="chart">
       <div className="bars">
         {data.map(d => (
-          <div key={d.minute} className="bar" title={`${new Date(d.minute).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}: ${d.count}`}>
+          <div
+            key={d.minute}
+            className="bar"
+            title={`${new Date(d.minute).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}: ${d.count}`}
+          >
             <span style={{ height: `${(d.count / max) * 100}%` }} />
           </div>
         ))}
       </div>
       <div className="chart-legend">
         <span>30 min ago</span>
-        <span>{total} payments · peak {max}/min</span>
+        <span>
+          {total} payments · peak {max}/min
+        </span>
         <span>now</span>
       </div>
     </div>

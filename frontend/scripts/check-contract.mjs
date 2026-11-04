@@ -18,16 +18,22 @@ const interfaceFields = name => {
 let failed = false;
 for (const [ts, schema] of Object.entries(PAIRS)) {
   const s = openapi.components?.schemas?.[schema];
-  if (!s) { console.error(`✗ schema ${schema} missing from openapi.json`); failed = true; continue; }
+  if (!s) {
+    console.error(`✗ schema ${schema} missing from openapi.json`);
+    failed = true;
+    continue;
+  }
   const api = new Set(Object.keys(s.properties));
   const ui = interfaceFields(ts);
   const missing = [...api].filter(f => !ui.has(f));
   const extra = [...ui].filter(f => !api.has(f));
   if (missing.length || extra.length) {
     failed = true;
-    console.error(`✗ ${ts} ≠ ${schema}` +
-      (missing.length ? `\n    in API, missing in src/types.ts: ${missing.join(', ')}` : '') +
-      (extra.length ? `\n    in src/types.ts, not in API: ${extra.join(', ')}` : ''));
+    console.error(
+      `✗ ${ts} ≠ ${schema}` +
+        (missing.length ? `\n    in API, missing in src/types.ts: ${missing.join(', ')}` : '') +
+        (extra.length ? `\n    in src/types.ts, not in API: ${extra.join(', ')}` : ''),
+    );
   } else {
     console.log(`✓ ${ts} matches ${schema} (${api.size} fields)`);
   }

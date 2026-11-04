@@ -43,6 +43,20 @@ public sealed class SettleFlowFixture : IAsyncLifetime
 
     public IServiceProvider ApiServices => _api!.Services;
 
+    /// <summary>Chaos: freeze (docker pause) Postgres or Kafka for a while, then resume. Ports stay the same.</summary>
+    public async Task FreezeAsync(string what, TimeSpan duration)
+    {
+        DotNet.Testcontainers.Containers.DockerContainer c = what switch
+        {
+            "postgres" => _postgres,
+            "kafka" => _redpanda,
+            _ => throw new ArgumentOutOfRangeException(nameof(what))
+        };
+        await c.PauseAsync();
+        try { await Task.Delay(duration); }
+        finally { await c.UnpauseAsync(); }
+    }
+
     public const string AdminPassword = "integration-admin-pw";
     public const string DemoPassword = "integration-demo-pw";
 
@@ -180,14 +194,14 @@ public sealed class SettleFlowFixture : IAsyncLifetime
 
     public static object NewPayment(decimal amount = 123.45m, string country = "IE", string merchant = "merchant_demo",
         string currency = "EUR", string? captureMode = null) => new
-    {
-        amount,
-        currency,
-        customerId = $"cust_{Guid.NewGuid():N}"[..20],
-        merchantId = merchant,
-        country,
-        captureMode
-    };
+        {
+            amount,
+            currency,
+            customerId = $"cust_{Guid.NewGuid():N}"[..20],
+            merchantId = merchant,
+            country,
+            captureMode
+        };
 
     /// <summary>Polls the API until the payment reaches the expected status.</summary>
     public async Task<PaymentView> WaitForStatusAsync(Guid id, string status, TimeSpan? timeout = null)

@@ -156,8 +156,16 @@ public sealed class PayoutService(IServiceScopeFactory scopes, ILogger<PayoutSer
                     {
                         payout = new
                         {
-                            payout.Id, payout.Reference, payout.Currency, payout.GrossAmount, payout.FeeAmount,
-                            payout.RefundAmount, payout.NetAmount, payout.PaymentCount, payout.RefundCount, payout.PaidAt
+                            payout.Id,
+                            payout.Reference,
+                            payout.Currency,
+                            payout.GrossAmount,
+                            payout.FeeAmount,
+                            payout.RefundAmount,
+                            payout.NetAmount,
+                            payout.PaymentCount,
+                            payout.RefundCount,
+                            payout.PaidAt
                         }
                     }
                 }, Json),
@@ -199,13 +207,25 @@ public sealed class ReconciliationService(IServiceScopeFactory scopes, IOptions<
 
         var run = new ReconciliationRun
         {
-            Id = Guid.NewGuid(), PeriodStart = from, PeriodEnd = end, StartedAt = DateTimeOffset.UtcNow, TriggeredBy = triggeredBy
+            Id = Guid.NewGuid(),
+            PeriodStart = from,
+            PeriodEnd = end,
+            StartedAt = DateTimeOffset.UtcNow,
+            TriggeredBy = triggeredBy
         };
         void Flag(ReconciliationItemKind kind, string op, Guid? reference, string? merchant, string ccy, decimal? ours, decimal? theirs, string details) =>
             run.Items.Add(new ReconciliationItem
             {
-                Id = Guid.NewGuid(), RunId = run.Id, Kind = kind, Operation = op, Reference = reference, MerchantId = merchant,
-                Currency = ccy, SettleFlowAmount = ours, AcquirerAmount = theirs, Details = details
+                Id = Guid.NewGuid(),
+                RunId = run.Id,
+                Kind = kind,
+                Operation = op,
+                Reference = reference,
+                MerchantId = merchant,
+                Currency = ccy,
+                SettleFlowAmount = ours,
+                AcquirerAmount = theirs,
+                Details = details
             });
 
         // ---- SettleFlow side ----

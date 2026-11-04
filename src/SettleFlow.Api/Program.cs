@@ -61,12 +61,16 @@ builder.Services.AddSwaggerGen(o =>
     o.SchemaFilter<RequiredValueTypesSchemaFilter>();
     o.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Type = SecuritySchemeType.Http, Scheme = "bearer", BearerFormat = "JWT",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
         Description = "Staff token from POST /api/auth/login"
     });
     o.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
     {
-        Type = SecuritySchemeType.ApiKey, In = ParameterLocation.Header, Name = AuthSetup.ApiKeyHeader,
+        Type = SecuritySchemeType.ApiKey,
+        In = ParameterLocation.Header,
+        Name = AuthSetup.ApiKeyHeader,
         Description = "Merchant API key"
     });
     o.AddSecurityRequirement(doc => new OpenApiSecurityRequirement { [new OpenApiSecuritySchemeReference("Bearer", doc)] = [] });

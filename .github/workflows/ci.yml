@@ -12,6 +12,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: '10.0.x' }
       - run: dotnet restore SettleFlow.sln
+      - name: Formatting (dotnet format)
+        run: dotnet format whitespace SettleFlow.sln --verify-no-changes
       - run: dotnet build SettleFlow.sln --configuration Release --no-restore -warnaserror
       - name: Unit tests
         run: dotnet test tests/SettleFlow.Tests --configuration Release --no-build
@@ -31,6 +33,10 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22', cache: npm, cache-dependency-path: frontend/package-lock.json }
       - run: npm ci
+      - name: Formatting (Prettier)
+        run: npm run format:check
+      - name: Unit tests (node --test)
+        run: npm test
       - name: Dashboard types match the API contract (openapi.json)
         run: npm run check:contract
       - run: npm run build

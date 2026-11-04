@@ -1,11 +1,41 @@
 import { session, type Session } from '../auth';
-import type { AnalyticsData, BlocklistEntry, FraudPerformance, FraudRules, FraudRulesView, Simulation, AuditEntry, DeadLetter, LedgerAccount, LedgerEntryRow, Merchant, NewPayment, Notification, Page, Payment, Payout, PayoutDetail, ReconItem, ReconRun, Refund, Stats, TimelineEntry, TrialBalance, User, WebhookDelivery } from '../types';
+import type {
+  AnalyticsData,
+  BlocklistEntry,
+  FraudPerformance,
+  FraudRules,
+  FraudRulesView,
+  Simulation,
+  AuditEntry,
+  DeadLetter,
+  LedgerAccount,
+  LedgerEntryRow,
+  Merchant,
+  NewPayment,
+  Notification,
+  Page,
+  Payment,
+  Payout,
+  PayoutDetail,
+  ReconItem,
+  ReconRun,
+  Refund,
+  Stats,
+  TimelineEntry,
+  TrialBalance,
+  User,
+  WebhookDelivery,
+} from '../types';
 
 /** Empty by default: requests go to the same origin and are proxied (nginx in Docker, Vite in dev). */
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string, public details?: Record<string, string[]>) {
+  constructor(
+    public status: number,
+    message: string,
+    public details?: Record<string, string[]>,
+  ) {
     super(message);
   }
 }
@@ -32,7 +62,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       message = problem.detail ?? problem.title ?? message;
       details = problem.errors;
       if (details) message = Object.values(details).flat().join(' ');
-    } catch { /* not JSON */ }
+    } catch {
+      /* not JSON */
+    }
     if (res.status === 429) message = 'Rate limit reached: slow down a little.';
     if (res.status === 403) message = 'You do not have permission to do that.';
     throw new ApiError(res.status, message, details);
@@ -69,8 +101,7 @@ export const api = {
 
   capture: (id: string, amount?: number) =>
     request<Payment>(`/api/payments/${id}/capture`, { method: 'POST', body: JSON.stringify({ amount }) }),
-  void: (id: string, reason?: string) =>
-    request<Payment>(`/api/payments/${id}/void`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  void: (id: string, reason?: string) => request<Payment>(`/api/payments/${id}/void`, { method: 'POST', body: JSON.stringify({ reason }) }),
   refund: (id: string, amount?: number, reason?: string, idempotencyKey: string = crypto.randomUUID()) =>
     request<Refund>(`/api/payments/${id}/refunds`, {
       method: 'POST',
@@ -87,7 +118,8 @@ export const api = {
   resendDelivery: (id: string) => request<{ resent: string }>(`/api/webhook-deliveries/${id}/resend`, { method: 'POST' }),
   configureWebhook: (merchantId: string, url: string) =>
     request<{ merchantId: string; url: string; signingSecret: string }>(`/api/merchants/${merchantId}/webhook`, {
-      method: 'PUT', body: JSON.stringify({ url }),
+      method: 'PUT',
+      body: JSON.stringify({ url }),
     }),
   disableWebhook: (merchantId: string) => request<void>(`/api/merchants/${merchantId}/webhook`, { method: 'DELETE' }),
 

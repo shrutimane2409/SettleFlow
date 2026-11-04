@@ -8,9 +8,21 @@ const SCENARIOS: { label: string; hint: string; payment: Partial<NewPayment> }[]
   { label: 'High amount', hint: 'Held for manual review', payment: { amount: 6000, country: 'DE', merchantId: 'merchant_demo' } },
   { label: 'Risky', hint: 'High amount + country → declined', payment: { amount: 7500, country: 'US', merchantId: 'merchant_demo' } },
   { label: 'Blocked merchant', hint: 'Acquirer declines settlement', payment: { amount: 88.4, country: 'FR', merchantId: 'blocked_shop' } },
-  { label: 'Acquirer outage', hint: 'Retries, circuit breaker opens, then dead-letter queue', payment: { amount: 42.1, country: 'NL', merchantId: 'merchant_outage' } },
-  { label: 'Slow acquirer', hint: 'Times out after 2s; circuit breaker trips', payment: { amount: 19.99, country: 'IE', merchantId: 'merchant_slow' } },
-  { label: 'Manual capture', hint: 'Authorized only: capture or void it from the payment drawer', payment: { amount: 320.75, country: 'IE', merchantId: 'merchant_demo', captureMode: 'manual' } },
+  {
+    label: 'Acquirer outage',
+    hint: 'Retries, circuit breaker opens, then dead-letter queue',
+    payment: { amount: 42.1, country: 'NL', merchantId: 'merchant_outage' },
+  },
+  {
+    label: 'Slow acquirer',
+    hint: 'Times out after 2s; circuit breaker trips',
+    payment: { amount: 19.99, country: 'IE', merchantId: 'merchant_slow' },
+  },
+  {
+    label: 'Manual capture',
+    hint: 'Authorized only: capture or void it from the payment drawer',
+    payment: { amount: 320.75, country: 'IE', merchantId: 'merchant_demo', captureMode: 'manual' },
+  },
 ];
 
 const FIELDS: { key: Exclude<keyof NewPayment, 'captureMode'>; label: string }[] = [
@@ -22,7 +34,13 @@ const FIELDS: { key: Exclude<keyof NewPayment, 'captureMode'>; label: string }[]
 ];
 
 export function PaymentForm({ onCreated }: { onCreated: () => void }) {
-  const [form, setForm] = useState({ amount: '1249.50', currency: 'EUR', customerId: 'cust_demo', merchantId: 'merchant_demo', country: 'IE' });
+  const [form, setForm] = useState({
+    amount: '1249.50',
+    currency: 'EUR',
+    customerId: 'cust_demo',
+    merchantId: 'merchant_demo',
+    country: 'IE',
+  });
   const [manual, setManual] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
@@ -55,7 +73,8 @@ export function PaymentForm({ onCreated }: { onCreated: () => void }) {
           customerId: `cust_burst_${Date.now().toString(36)}_${i}`,
           amount: Math.round((50 + Math.random() * 9000) * 100) / 100,
           country: ['IE', 'DE', 'FR', 'US', 'BR', 'NL'][i % 6],
-        })),
+        }),
+      ),
     );
     const ok = results.filter(r => r.status === 'fulfilled').length;
     setMessage({ tone: ok === 10 ? 'ok' : 'error', text: `Burst: ${ok}/10 accepted` });
@@ -89,10 +108,16 @@ export function PaymentForm({ onCreated }: { onCreated: () => void }) {
           </label>
         ))}
       </div>
-      <label className="toggle"><input type="checkbox" checked={manual} onChange={e => setManual(e.target.checked)} /> Manual capture (authorize only)</label>
+      <label className="toggle">
+        <input type="checkbox" checked={manual} onChange={e => setManual(e.target.checked)} /> Manual capture (authorize only)
+      </label>
       <div className="form-actions">
-        <button className="primary" disabled={busy}><Send size={15} /> Submit payment</button>
-        <button type="button" onClick={burst} disabled={busy} title="Send 10 random payments"><Zap size={15} /> Burst ×10</button>
+        <button className="primary" disabled={busy}>
+          <Send size={15} /> Submit payment
+        </button>
+        <button type="button" onClick={burst} disabled={busy} title="Send 10 random payments">
+          <Zap size={15} /> Burst ×10
+        </button>
       </div>
       {message && <p className={`form-msg ${message.tone}`}>{message.text}</p>}
     </form>

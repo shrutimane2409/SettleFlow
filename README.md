@@ -287,10 +287,18 @@ cd frontend && npm install && VITE_PROXY_TARGET=http://localhost:5080 npm run de
 
 ## Tests
 
-```bash
-dotnet test tests/SettleFlow.Tests              # unit tests: fraud rules, acquirer, validation (no Docker)
-dotnet test tests/SettleFlow.IntegrationTests   # end-to-end: real Postgres + Redpanda via Testcontainers
-```
+| Suite | Command | What it covers |
+|---|---|---|
+| Backend unit | `make test-unit` | Fraud engine, acquirer and circuit breaker, ledger and fees, webhooks and SSRF guard, validation, CSV safety, **event contract snapshots** |
+| End-to-end | `make test-e2e` | API and all workers in-process against **real Postgres + Redpanda** (Testcontainers): every payment flow, security, money, live stream, ETags, OpenAPI contract snapshot |
+| **Chaos** | (part of e2e) | Postgres frozen mid-flight, Kafka frozen mid-flight, API accepting payments while Kafka is down. Asserts **every payment settles and none is dead-lettered** |
+| Frontend unit | `cd frontend && npm test` | Formatting and permissions (`node --test`, zero test dependencies) |
+| Browser | `make test-ui` | Playwright in Chrome against the running stack: login, create a payment and watch it settle live, role-based UI, every page renders without errors |
+| Load | `make load-test` | k6, see [docs/performance.md](docs/performance.md) |
+
+`make lint` runs the formatting checks (`dotnet format`, Prettier), the type check, and the dashboard ⇄ API contract check. CI runs all of these except the browser and load tests, which need the full stack.
+
+`make seed` fills a running stack with realistic demo data (mixed outcomes, manual captures, refunds) and respects the API's rate limits.
 
 The integration suite runs the API and every worker in-process against real containers. It covers the settle, decline, review, acquirer decline and DLQ/replay flows, plus idempotency (including 10 concurrent requests with one key), validation, paging and health. CI runs both suites, checks that migrations match the model, builds the dashboard, and builds all Docker images, pushing them to GHCR on `main`.
 

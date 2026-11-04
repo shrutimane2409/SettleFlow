@@ -18,10 +18,20 @@ export function PaymentsTable({ payments, onSelect, compact }: { payments: Payme
       {payments.map(p => (
         <button className="tr row" key={p.id} onClick={() => onSelect(p.id)}>
           <span className="mono">{p.id.slice(0, 8)}…</span>
-          <span>{formatMoney(p.amount, p.currency)} <small className="muted-text">{p.country}</small></span>
-          {!compact && <span className="ellipsis">{p.customerId} → {p.merchantId}</span>}
-          <span><RiskMeter score={p.riskScore} /></span>
-          <span><StatusBadge status={p.status} /></span>
+          <span>
+            {formatMoney(p.amount, p.currency)} <small className="muted-text">{p.country}</small>
+          </span>
+          {!compact && (
+            <span className="ellipsis">
+              {p.customerId} → {p.merchantId}
+            </span>
+          )}
+          <span>
+            <RiskMeter score={p.riskScore} />
+          </span>
+          <span>
+            <StatusBadge status={p.status} />
+          </span>
           <span className="muted-text">{timeAgo(p.createdAt)}</span>
         </button>
       ))}

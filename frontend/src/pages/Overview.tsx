@@ -22,22 +22,42 @@ export function Overview({ onSelect, tick, onCreated }: { onSelect: (id: string)
     <>
       <section className="stats">
         <Stat title="Total payments" value={stats?.total ?? '—'} hint={`${inFlight} in flight`} />
-        <Stat title="Settled" value={s?.Settled ?? '—'} tone="good"
-          hint={volume ? `${formatMoney(volume.volume, volume.currency)}${stats!.settledVolume.length > 1 ? ' +more' : ''}` : 'no volume yet'} />
-        <Stat title="Success rate" value={stats?.successRate != null ? `${stats.successRate}%` : '—'} hint={`avg risk ${stats?.averageRiskScore ?? '—'}`} />
-        <Stat title="Awaiting review" value={stats?.reviewQueue ?? '—'} tone={stats?.reviewQueue ? 'warn' : undefined} hint="manual decisions" />
-        <Stat title="Declined / failed" value={(s?.Declined ?? 0) + (s?.SettlementFailed ?? 0)} tone="bad"
-          hint={`${s?.Declined ?? 0} fraud · ${s?.SettlementFailed ?? 0} acquirer`} />
-        <Stat title="Pipeline" value={stats ? `${stats.pipeline.outboxPending}` : '—'}
+        <Stat
+          title="Settled"
+          value={s?.Settled ?? '—'}
+          tone="good"
+          hint={
+            volume ? `${formatMoney(volume.volume, volume.currency)}${stats!.settledVolume.length > 1 ? ' +more' : ''}` : 'no volume yet'
+          }
+        />
+        <Stat
+          title="Success rate"
+          value={stats?.successRate != null ? `${stats.successRate}%` : '—'}
+          hint={`avg risk ${stats?.averageRiskScore ?? '—'}`}
+        />
+        <Stat
+          title="Awaiting review"
+          value={stats?.reviewQueue ?? '—'}
+          tone={stats?.reviewQueue ? 'warn' : undefined}
+          hint="manual decisions"
+        />
+        <Stat
+          title="Declined / failed"
+          value={(s?.Declined ?? 0) + (s?.SettlementFailed ?? 0)}
+          tone="bad"
+          hint={`${s?.Declined ?? 0} fraud · ${s?.SettlementFailed ?? 0} acquirer`}
+        />
+        <Stat
+          title="Pipeline"
+          value={stats ? `${stats.pipeline.outboxPending}` : '—'}
           tone={stats?.pipeline.deadLetters ? 'bad' : 'good'}
-          hint={stats ? `outbox lag ${stats.pipeline.outboxLagSeconds}s · ${stats.pipeline.deadLetters} DLQ` : ''} />
+          hint={stats ? `outbox lag ${stats.pipeline.outboxLagSeconds}s · ${stats.pipeline.deadLetters} DLQ` : ''}
+        />
       </section>
 
       <section className="grid">
         <Card title="Create payment" aside="API → Outbox → Kafka">
-          {can.createPayments(me)
-            ? <PaymentForm onCreated={onCreated} />
-            : <Empty>Your role ({me?.user.role}) is read-only.</Empty>}
+          {can.createPayments(me) ? <PaymentForm onCreated={onCreated} /> : <Empty>Your role ({me?.user.role}) is read-only.</Empty>}
         </Card>
 
         <div className="stack">
@@ -50,7 +70,9 @@ export function Overview({ onSelect, tick, onCreated }: { onSelect: (id: string)
         </div>
 
         <Card title="Notifications" aside="delivered by notification-worker" className="notes">
-          {(notes ?? []).length === 0 ? <Empty>Nothing delivered yet.</Empty> : (
+          {(notes ?? []).length === 0 ? (
+            <Empty>Nothing delivered yet.</Empty>
+          ) : (
             <ul className="feed">
               {notes!.map(n => (
                 <li key={n.id} onClick={() => onSelect(n.paymentId)}>

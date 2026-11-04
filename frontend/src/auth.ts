@@ -41,8 +41,5 @@ export function useSession() {
   return useSyncExternalStore(session.subscribe, session.get);
 }
 
-export const can = {
-  review: (s: Session | null) => s?.user.role === 'admin' || s?.user.role === 'analyst',
-  admin: (s: Session | null) => s?.user.role === 'admin',
-  createPayments: (s: Session | null) => s?.user.role === 'admin' || s?.user.role === 'analyst',
-};
+// Role checks live in permissions.ts (pure, unit-tested).
+export { can } from './permissions';

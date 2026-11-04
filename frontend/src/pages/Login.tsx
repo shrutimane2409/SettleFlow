@@ -16,9 +16,11 @@ export function Login() {
     try {
       session.set(await api.login(username.trim(), password));
     } catch (err) {
-      setError(err instanceof Error && err.message.includes('429')
-        ? 'Too many attempts. Wait a minute and try again.'
-        : 'Invalid username or password.');
+      setError(
+        err instanceof Error && err.message.includes('429')
+          ? 'Too many attempts. Wait a minute and try again.'
+          : 'Invalid username or password.',
+      );
     } finally {
       setBusy(false);
     }
@@ -29,17 +31,30 @@ export function Login() {
       <form className="login card" onSubmit={submit}>
         <div className="brand">
           <div className="logo">S</div>
-          <div><b>SettleFlow</b><span>Payment Operations</span></div>
+          <div>
+            <b>SettleFlow</b>
+            <span>Payment Operations</span>
+          </div>
         </div>
         <h1>Sign in</h1>
-        <label>Username<input autoFocus autoComplete="username" value={username} onChange={e => setUsername(e.target.value)} /></label>
-        <label>Password<input type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} /></label>
-        <button className="primary" disabled={busy || !username || !password}><LogIn size={15} /> Sign in</button>
+        <label>
+          Username
+          <input autoFocus autoComplete="username" value={username} onChange={e => setUsername(e.target.value)} />
+        </label>
+        <label>
+          Password
+          <input type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} />
+        </label>
+        <button className="primary" disabled={busy || !username || !password}>
+          <LogIn size={15} /> Sign in
+        </button>
         {error && <p className="form-msg error">{error}</p>}
-        {import.meta.env.VITE_HIDE_DEMO_LOGINS !== 'true' && <p className="muted small">
-          Local demo accounts: <span className="mono">admin</span> / <span className="mono">admin-change-me</span>,{' '}
-          <span className="mono">analyst</span> or <span className="mono">viewer</span> / <span className="mono">settleflow-demo</span>
-        </p>}
+        {import.meta.env.VITE_HIDE_DEMO_LOGINS !== 'true' && (
+          <p className="muted small">
+            Local demo accounts: <span className="mono">admin</span> / <span className="mono">admin-change-me</span>,{' '}
+            <span className="mono">analyst</span> or <span className="mono">viewer</span> / <span className="mono">settleflow-demo</span>
+          </p>
+        )}
       </form>
     </div>
   );

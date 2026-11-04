@@ -55,7 +55,10 @@ public static class FinanceEndpoints
             var sum = sums.TryGetValue(a.Id, out var s) ? s.Sum : 0;
             return new
             {
-                a.Id, a.Kind, a.Owner, a.Currency,
+                a.Id,
+                a.Kind,
+                a.Owner,
+                a.Currency,
                 debitMinusCredit = sum,
                 // Assets are debit-normal; liabilities and revenue are credit-normal.
                 balance = a.Kind == LedgerAccounts.KindClearing ? sum : -sum,
@@ -80,7 +83,12 @@ public static class FinanceEndpoints
         var list = await q.OrderByDescending(t => t.OccurredAt).Take(Math.Clamp(take, 1, 200)).ToListAsync(ct);
         return Results.Ok(list.Select(t => new
         {
-            t.Id, t.Type, t.Reference, t.Currency, t.Description, t.OccurredAt,
+            t.Id,
+            t.Type,
+            t.Reference,
+            t.Currency,
+            t.Description,
+            t.OccurredAt,
             entries = t.Entries.Select(e => new { e.AccountId, e.Amount })
         }));
     }
@@ -202,7 +210,15 @@ public static class FinanceEndpoints
 
     private static object RunSummary(ReconciliationRun r) => new
     {
-        r.Id, r.PeriodStart, r.PeriodEnd, r.StartedAt, r.CompletedAt, r.TriggeredBy, r.Matched, r.Discrepancies, r.LedgerBalanced,
+        r.Id,
+        r.PeriodStart,
+        r.PeriodEnd,
+        r.StartedAt,
+        r.CompletedAt,
+        r.TriggeredBy,
+        r.Matched,
+        r.Discrepancies,
+        r.LedgerBalanced,
         unresolved = r.Items.Count(i => i.ResolvedAt is null)
     };
 

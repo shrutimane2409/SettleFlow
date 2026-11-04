@@ -175,8 +175,12 @@ public static class FraudEndpoints
         var actor = Actor.From(http);
         var entry = new BlocklistEntry
         {
-            Id = Guid.NewGuid(), Type = type, Value = value, Reason = request.Reason.Trim()[..Math.Min(request.Reason.Trim().Length, 200)],
-            CreatedBy = actor.Name, CreatedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            Type = type,
+            Value = value,
+            Reason = request.Reason.Trim()[..Math.Min(request.Reason.Trim().Length, 200)],
+            CreatedBy = actor.Name,
+            CreatedAt = DateTimeOffset.UtcNow,
             ExpiresAt = request.ExpiresInDays is > 0 ? DateTimeOffset.UtcNow.AddDays(request.ExpiresInDays.Value) : null
         };
         db.Blocklist.Add(entry);
@@ -221,8 +225,15 @@ public static class FraudEndpoints
         var now = DateTimeOffset.UtcNow;
         var cb = new Chargeback
         {
-            Id = Guid.NewGuid(), PaymentId = p.Id, MerchantId = p.MerchantId, Amount = amount, Fee = fee, Currency = p.Currency,
-            ReasonCode = reason, CreatedBy = actor.Name, CreatedAt = now
+            Id = Guid.NewGuid(),
+            PaymentId = p.Id,
+            MerchantId = p.MerchantId,
+            Amount = amount,
+            Fee = fee,
+            Currency = p.Currency,
+            ReasonCode = reason,
+            CreatedBy = actor.Name,
+            CreatedAt = now
         };
         db.Chargebacks.Add(cb);
         p.ChargebackAmount = amount;
@@ -241,8 +252,12 @@ public static class FraudEndpoints
         if (request.BlocklistCustomer && !await db.Blocklist.AnyAsync(b => b.Type == "customer" && b.Value == p.CustomerId, ct))
             db.Blocklist.Add(new BlocklistEntry
             {
-                Id = Guid.NewGuid(), Type = "customer", Value = p.CustomerId, Reason = $"chargeback ({reason}) on {p.Id}",
-                CreatedBy = actor.Name, CreatedAt = now
+                Id = Guid.NewGuid(),
+                Type = "customer",
+                Value = p.CustomerId,
+                Reason = $"chargeback ({reason}) on {p.Id}",
+                CreatedBy = actor.Name,
+                CreatedAt = now
             });
 
         db.Enqueue(Topics.NotificationsRequested, p.Id.ToString(),

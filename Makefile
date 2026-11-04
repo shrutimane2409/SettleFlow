@@ -33,7 +33,8 @@ build: ## Build backend (warnings as errors, like CI) and frontend
 	cd frontend && npm ci && npm run build
 
 .PHONY: test
-test: test-unit test-e2e ## Run all tests
+test: test-unit test-e2e ## Run backend unit + e2e tests and frontend unit tests
+	cd frontend && npm test
 
 .PHONY: test-unit
 test-unit: ## Unit tests (no Docker needed)
@@ -42,6 +43,27 @@ test-unit: ## Unit tests (no Docker needed)
 .PHONY: test-e2e
 test-e2e: ## End-to-end tests against real Postgres + Redpanda (Testcontainers; needs Docker)
 	dotnet test tests/SettleFlow.IntegrationTests
+
+.PHONY: test-ui
+test-ui: ## Playwright browser tests against the running stack (uses local Chrome)
+	cd frontend && npm run test:e2e
+
+COUNT ?= 150
+
+.PHONY: seed
+seed: ## Fill the running stack with realistic demo data (COUNT=150)
+	docker run --rm --network settleflow_default -v "$(CURDIR)/loadtest:/scripts" grafana/k6:1.3.0 \
+		run -q -e BASE_URL=http://api:8080 -e COUNT=$(COUNT) /scripts/seed.js
+
+.PHONY: format
+format: ## Format backend (dotnet format) and frontend (Prettier)
+	dotnet format whitespace SettleFlow.sln
+	cd frontend && npm run format
+
+.PHONY: lint
+lint: ## Check formatting, types and the API contract without changing files (what CI runs)
+	dotnet format whitespace SettleFlow.sln --verify-no-changes
+	cd frontend && npm run format:check && npm run typecheck && npm run check:contract
 
 .PHONY: load-test
 load-test: ## k6 load test against the running stack (RATE=50 DURATION=60s)

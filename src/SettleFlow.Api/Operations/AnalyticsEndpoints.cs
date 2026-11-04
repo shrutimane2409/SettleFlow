@@ -74,12 +74,20 @@ public static class AnalyticsEndpoints
             daily,
             merchants = merchants.Select(m => new
             {
-                m.MerchantId, m.Payments, m.Settled, m.SettledVolume, m.AvgRisk, m.Refunds, m.Chargebacks,
+                m.MerchantId,
+                m.Payments,
+                m.Settled,
+                m.SettledVolume,
+                m.AvgRisk,
+                m.Refunds,
+                m.Chargebacks,
                 approvalRate = m.Payments == 0 ? 0 : Math.Round(100.0 * m.Settled / m.Payments, 1)
             }),
             countries = countries.Select(c => new
             {
-                c.Country, c.Payments, c.AvgRisk,
+                c.Country,
+                c.Payments,
+                c.AvgRisk,
                 approvalRate = c.Payments == 0 ? 0 : Math.Round(100.0 * c.Approved / c.Payments, 1)
             }),
             reasons
