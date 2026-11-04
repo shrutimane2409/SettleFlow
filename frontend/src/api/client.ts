@@ -1,5 +1,5 @@
 import { session, type Session } from '../auth';
-import type { AuditEntry, DeadLetter, LedgerAccount, LedgerEntryRow, Merchant, NewPayment, Notification, Page, Payment, Payout, PayoutDetail, ReconItem, ReconRun, Refund, Stats, TimelineEntry, TrialBalance, User, WebhookDelivery } from '../types';
+import type { BlocklistEntry, FraudPerformance, FraudRules, FraudRulesView, Simulation, AuditEntry, DeadLetter, LedgerAccount, LedgerEntryRow, Merchant, NewPayment, Notification, Page, Payment, Payout, PayoutDetail, ReconItem, ReconRun, Refund, Stats, TimelineEntry, TrialBalance, User, WebhookDelivery } from '../types';
 
 /** Empty by default: requests go to the same origin and are proxied (nginx in Docker, Vite in dev). */
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
@@ -119,6 +119,19 @@ export const api = {
 
   streamToken: () => request<{ token: string; expiresAt: string }>('/api/stream/token', { method: 'POST' }),
   streamUrl: (token: string) => `${BASE}/api/stream?access_token=${encodeURIComponent(token)}`,
+
+  fraudRules: () => request<FraudRulesView>('/api/fraud/rules'),
+  saveFraudRules: (rules: FraudRules, comment?: string) =>
+    request<{ version: number }>('/api/fraud/rules', { method: 'PUT', body: JSON.stringify({ rules, comment }) }),
+  simulateFraud: (rules: FraudRules, days: number) =>
+    request<Simulation>('/api/fraud/simulate', { method: 'POST', body: JSON.stringify({ rules, days }) }),
+  fraudPerformance: (days = 30) => request<FraudPerformance>(`/api/fraud/performance?days=${days}`),
+  blocklist: () => request<BlocklistEntry[]>('/api/fraud/blocklist'),
+  addBlocklist: (type: string, value: string, reason: string) =>
+    request<BlocklistEntry>('/api/fraud/blocklist', { method: 'POST', body: JSON.stringify({ type, value, reason }) }),
+  removeBlocklist: (id: string) => request<void>(`/api/fraud/blocklist/${id}`, { method: 'DELETE' }),
+  chargeback: (paymentId: string, reasonCode: string, blocklistCustomer: boolean) =>
+    request<unknown>(`/api/payments/${paymentId}/chargebacks`, { method: 'POST', body: JSON.stringify({ reasonCode, blocklistCustomer }) }),
 
   notifications: (take = 15) => request<Notification[]>(`/api/notifications?take=${take}`),
 

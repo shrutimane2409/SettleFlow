@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Activity, BookOpen, CreditCard, FileClock, Inbox, Landmark, LogOut, RefreshCw, Scale, ShieldAlert, Store, Users as UsersIcon, Webhook } from 'lucide-react';
+import { Activity, BookOpen, ShieldBan, CreditCard, FileClock, Inbox, Landmark, LogOut, RefreshCw, Scale, ShieldAlert, Store, Users as UsersIcon, Webhook } from 'lucide-react';
 import { api } from './api/client';
 import { can, session, useSession } from './auth';
 import { PaymentDrawer } from './components/PaymentDrawer';
 import { useHashRoute, useLiveStream, usePolling } from './hooks';
 import { AuditLog, Merchants, Users } from './pages/Admin';
 import { DeadLetters } from './pages/DeadLetters';
+import { Fraud } from './pages/Fraud';
 import { Ledger, Payouts, Reconciliation } from './pages/Finance';
 import { Login } from './pages/Login';
 import { Overview } from './pages/Overview';
@@ -18,6 +19,7 @@ const NAV = [
   { route: 'overview', label: 'Overview', icon: Activity, title: 'Payment Operations', subtitle: 'Real-time event-driven settlement pipeline' },
   { route: 'payments', label: 'Payments', icon: CreditCard, title: 'Payments', subtitle: 'Search and inspect every payment' },
   { route: 'review', label: 'Review queue', icon: ShieldAlert, title: 'Review queue', subtitle: 'Payments the risk engine wants a human to decide' },
+  { route: 'fraud', label: 'Fraud rules', icon: ShieldBan, title: 'Fraud rules', subtitle: 'Versioned rules, simulation, blocklist and chargeback feedback' },
   { route: 'dlq', label: 'Dead letters', icon: Inbox, title: 'Dead letters', subtitle: 'Failed messages, ready to replay' },
   { route: 'ledger', label: 'Ledger', icon: BookOpen, title: 'Ledger', subtitle: 'Double-entry books: every movement of money' },
   { route: 'payouts', label: 'Payouts', icon: Landmark, title: 'Payouts', subtitle: 'Settlement batches paid to merchants' },
@@ -100,6 +102,7 @@ function App() {
         {current.route === 'payments' && <Payments onSelect={setSelected} tick={tick} />}
         {current.route === 'review' && <Payments onSelect={setSelected} tick={tick} fixedStatus="FraudReview" title="Awaiting manual review" />}
         {current.route === 'dlq' && <DeadLetters onSelect={setSelected} />}
+        {current.route === 'fraud' && <Fraud onSelect={setSelected} />}
         {current.route === 'webhooks' && <Webhooks onSelect={setSelected} />}
         {current.route === 'ledger' && <Ledger onSelect={setSelected} />}
         {current.route === 'payouts' && <Payouts onSelect={setSelected} />}

@@ -15,6 +15,7 @@ builder.AddSettleFlowAuth();
 builder.Services.AddWebhookSecrets(builder.Configuration);
 builder.Services.AddRetention(builder.Configuration);
 builder.Services.AddFinance(builder.Configuration);
+builder.Services.AddFraudEngine(builder.Configuration);
 builder.Services.AddSingleton<PaymentChangeFeed>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<PaymentChangeFeed>());
 
@@ -94,6 +95,7 @@ app.MapLifecycleEndpoints();
 app.MapOperationsEndpoints();
 app.MapFinanceEndpoints();
 app.MapLiveStreamEndpoints();
+app.MapFraudEndpoints();
 app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription().AllowAnonymous();
 
 // Kubernetes runs `dotnet SettleFlow.Api.dll --migrate-only` as a pre-upgrade Job: migrate, seed, exit.

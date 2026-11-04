@@ -77,6 +77,12 @@ settlement.completed / payments.failed → notification workers → notification
 - `Database:MigrateOnStartup=false` makes services wait for migrations; `dotnet SettleFlow.Api.dll --migrate-only` migrates, seeds, and exits (the Helm Job).
 - Loki shipping is on when `Loki:Url` is set; `TraceContextEnricher` adds TraceId/SpanId to every log event.
 
+### Fraud platform (Phase 5)
+- `FraudScorer.Score(input, rules)` is static and pure. Rules come from `FraudRulesProvider.GetActiveAsync` (the active `FraudRuleSets` row as JSON, cached 5 s; falls back to the `Fraud` config = "v0"). A partial-unique index guarantees exactly one active version.
+- Saving rules = a new version, never an update (`PUT /api/fraud/rules`). Tests that change rules **must restore defaults** (`{ rules: {} }`) in `finally` and wait out the 5 s cache.
+- `FraudSimulator` must use the same `FraudScorer` as the worker. Velocity is reconstructed in memory per customer.
+- Chargebacks post ledger type `chargeback` (Dr merchant amount + fee, Cr clearing amount, Cr fees fee) and notify via `NotificationTypes.ChargedBack` → `payment.charged_back`.
+
 ### Demo hooks (`SettlementOptions`)
 `merchant_outage` always throws (circuit opens, then the DLQ). `merchant_slow` exceeds the timeout. `blocked_*` merchants are declined, and only EUR/GBP/USD are supported. Random transient failures run at `TransientFailureRate` (set to 0 in the integration tests).
 

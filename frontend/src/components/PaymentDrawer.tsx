@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Ban, Check, HandCoins, Undo2, X } from 'lucide-react';
+import { Ban, Check, Gavel, HandCoins, Undo2, X } from 'lucide-react';
 import { api } from '../api/client';
 import { can, useSession } from '../auth';
 import { formatMoney, timeAgo, usePolling } from '../hooks';
@@ -82,6 +82,26 @@ function RefundBox({ payment, onDone }: { payment: Payment; onDone: () => Promis
   );
 }
 
+function ChargebackBox({ payment, onDone }: { payment: Payment; onDone: () => Promise<unknown> }) {
+  const [reason, setReason] = useState('fraud');
+  const [block, setBlock] = useState(true);
+  const { error, busy, run } = useAction(onDone);
+  return (
+    <div className="action-box">
+      <h3>Record chargeback</h3>
+      <p className="muted small">When the acquirer reports a dispute. Debits the merchant the disputed amount plus the dispute fee.</p>
+      <div className="fields two">
+        <label>Reason<select value={reason} onChange={e => setReason(e.target.value)}>
+          {['fraud', 'not_received', 'not_as_described', 'duplicate', 'cancelled', 'other'].map(r => <option key={r}>{r}</option>)}
+        </select></label>
+        <label className="toggle"><input type="checkbox" checked={block} onChange={e => setBlock(e.target.checked)} /> Blocklist customer</label>
+      </div>
+      <button className="reject" disabled={busy} onClick={() => run(() => api.chargeback(payment.id, reason, block))}><Gavel size={15} /> Record chargeback</button>
+      {error && <p className="form-msg error">{error}</p>}
+    </div>
+  );
+}
+
 export function PaymentDrawer({ id, onClose, onChanged }: { id: string; onClose: () => void; onChanged: () => void }) {
   const me = useSession();
   const { data: payment, refresh: refreshPayment } = usePolling(() => api.payment(id), 1500, [id]);
@@ -120,6 +140,8 @@ export function PaymentDrawer({ id, onClose, onChanged }: { id: string; onClose:
               <dt>Country</dt><dd>{payment.country}</dd>
               <dt>Capture</dt><dd>{payment.captureMode}</dd>
               {payment.capturedAmount != null && (<><dt>Captured</dt><dd>{formatMoney(payment.capturedAmount, payment.currency)}</dd></>)}
+              {payment.riskRuleSetVersion != null && (<><dt>Rules</dt><dd>v{payment.riskRuleSetVersion}{payment.riskModelScore != null ? ` · model ${payment.riskModelScore.toFixed(2)}` : ''}</dd></>)}
+              {payment.chargebackAmount > 0 && (<><dt>Charged back</dt><dd className="bad-text">{formatMoney(payment.chargebackAmount, payment.currency)}</dd></>)}
               {payment.feeAmount != null && (<><dt>Fee</dt><dd>{formatMoney(payment.feeAmount, payment.currency)}</dd></>)}
               {payment.payoutId && (<><dt>Paid out</dt><dd className="mono small">{payment.payoutId.slice(0, 8)}…</dd></>)}
               {payment.refundedAmount > 0 && (<><dt>Refunded</dt><dd>{formatMoney(payment.refundedAmount, payment.currency)}</dd></>)}
@@ -133,6 +155,7 @@ export function PaymentDrawer({ id, onClose, onChanged }: { id: string; onClose:
             {payment.status === 'FraudReview' && can.review(me) && <ReviewBox payment={payment} onDone={refreshAll} />}
             {payment.status === 'Authorized' && canWrite && <CaptureBox payment={payment} onDone={refreshAll} />}
             {payment.refundableAmount > 0 && canWrite && <RefundBox payment={payment} onDone={refreshAll} />}
+            {payment.refundableAmount > 0 && can.review(me) && <ChargebackBox payment={payment} onDone={refreshAll} />}
 
             {(refunds ?? []).length > 0 && (
               <>

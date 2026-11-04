@@ -20,7 +20,9 @@ public enum PaymentStatus
     Settled,
     SettlementFailed,
     PartiallyRefunded,
-    Refunded
+    Refunded,
+    /// <summary>The cardholder disputed the payment and the acquirer took the money back.</summary>
+    ChargedBack
 }
 
 public static class CaptureModes
@@ -81,6 +83,14 @@ public sealed class Payment
 
     /// <summary>The payout that paid this payment out to the merchant.</summary>
     public Guid? PayoutId { get; set; }
+
+    /// <summary>Version of the fraud rule set that scored this payment (explainability / audit).</summary>
+    public int? RiskRuleSetVersion { get; set; }
+
+    /// <summary>Model risk probability (0..1) from the pluggable risk model, if enabled.</summary>
+    public double? RiskModelScore { get; set; }
+
+    public decimal ChargebackAmount { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
@@ -154,6 +164,43 @@ public sealed class Refund
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public Guid? PayoutId { get; set; }
+}
+
+/// <summary>A versioned, immutable fraud configuration. Exactly one is active.</summary>
+public sealed class FraudRuleSet
+{
+    public int Version { get; set; }
+    public string RulesJson { get; set; } = "";
+    public bool Active { get; set; }
+    public string? Comment { get; set; }
+    public string CreatedBy { get; set; } = "";
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+public sealed class BlocklistEntry
+{
+    public Guid Id { get; set; }
+    /// <summary><c>customer</c> or <c>country</c>.</summary>
+    public string Type { get; set; } = "";
+    public string Value { get; set; } = "";
+    public string Reason { get; set; } = "";
+    public string CreatedBy { get; set; } = "";
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? ExpiresAt { get; set; }
+}
+
+public sealed class Chargeback
+{
+    public Guid Id { get; set; }
+    public Guid PaymentId { get; set; }
+    public string MerchantId { get; set; } = "";
+    public decimal Amount { get; set; }
+    public decimal Fee { get; set; }
+    public string Currency { get; set; } = "";
+    /// <summary>Card-network style reason, e.g. <c>fraud</c>, <c>not_received</c>, <c>duplicate</c>.</summary>
+    public string ReasonCode { get; set; } = "";
+    public string CreatedBy { get; set; } = "";
+    public DateTimeOffset CreatedAt { get; set; }
 }
 
 /// <summary>A settlement batch: what a merchant was paid for a set of payments and refunds.</summary>
@@ -278,6 +325,9 @@ public sealed class SettleFlowDbContext(DbContextOptions<SettleFlowDbContext> op
     public DbSet<LedgerTransaction> LedgerTransactions => Set<LedgerTransaction>();
     public DbSet<LedgerEntry> LedgerEntries => Set<LedgerEntry>();
     public DbSet<Payout> Payouts => Set<Payout>();
+    public DbSet<FraudRuleSet> FraudRuleSets => Set<FraudRuleSet>();
+    public DbSet<BlocklistEntry> Blocklist => Set<BlocklistEntry>();
+    public DbSet<Chargeback> Chargebacks => Set<Chargeback>();
     public DbSet<ReconciliationRun> ReconciliationRuns => Set<ReconciliationRun>();
     public DbSet<ReconciliationItem> ReconciliationItems => Set<ReconciliationItem>();
 
@@ -308,6 +358,7 @@ public sealed class SettleFlowDbContext(DbContextOptions<SettleFlowDbContext> op
             e.Property(x => x.CapturedAmount).HasPrecision(18, 2);
             e.Property(x => x.RefundedAmount).HasPrecision(18, 2);
             e.Property(x => x.FeeAmount).HasPrecision(18, 2);
+            e.Property(x => x.ChargebackAmount).HasPrecision(18, 2);
             e.HasIndex(x => new { x.Status, x.AuthorizedAt });
             e.HasIndex(x => new { x.MerchantId, x.Currency, x.SettledAt }).HasFilter("\"PayoutId\" IS NULL AND \"SettledAt\" IS NOT NULL");
             e.HasIndex(x => x.SettledAt);
@@ -406,6 +457,32 @@ public sealed class SettleFlowDbContext(DbContextOptions<SettleFlowDbContext> op
             e.Property(x => x.Amount).HasPrecision(18, 2);
             e.HasOne<LedgerAccount>().WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(x => x.AccountId);
+        });
+
+        b.Entity<FraudRuleSet>(e =>
+        {
+            e.HasKey(x => x.Version);
+            e.Property(x => x.Version).ValueGeneratedNever();
+            e.Property(x => x.RulesJson).HasColumnType("jsonb");
+            // At most one active rule set, enforced by the database.
+            e.HasIndex(x => x.Active).IsUnique().HasFilter("\"Active\"");
+        });
+
+        b.Entity<BlocklistEntry>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Type).HasMaxLength(16);
+            e.Property(x => x.Value).HasMaxLength(64);
+            e.HasIndex(x => new { x.Type, x.Value }).IsUnique();
+        });
+
+        b.Entity<Chargeback>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Amount).HasPrecision(18, 2);
+            e.Property(x => x.Fee).HasPrecision(18, 2);
+            e.HasIndex(x => x.PaymentId).IsUnique(); // one dispute per payment
+            e.HasIndex(x => x.CreatedAt);
         });
 
         b.Entity<Payout>(e =>

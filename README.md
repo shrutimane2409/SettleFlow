@@ -50,6 +50,15 @@ PendingFraud ─► FraudApproved ─► Settled ─► PartiallyRefunded ─►
 | Webhook URL | `PUT /api/merchants/me/webhook` (merchant) or `PUT /api/merchants/{id}/webhook` (admin) | Returns the signing secret **once** |
 | Deliveries | `GET /api/webhook-deliveries`, `POST /api/webhook-deliveries/{id}/resend` | |
 
+## Fraud platform
+
+- **Rules are data, not code.** The active rule set (rule on/off switches, scores, thresholds, low-risk countries, velocity window) is a **versioned** row in Postgres, edited from the dashboard (`PUT /api/fraud/rules`, admin). Workers pick changes up within ~5 s, with no redeploy. Every payment records the rule version that scored it, and every change is audited with a field-by-field diff.
+- **Simulation before activation**: `POST /api/fraud/simulate` re-scores the last N days of payments with a candidate rule set. It shows decision totals before and after, the transitions (`APPROVED→REVIEW`, …), example payments, and how many known chargebacks the candidate would have caught.
+- **Blocklist** of customers and countries (optional expiry); blocklisted payments are declined outright.
+- **Chargebacks**: `POST /api/payments/{id}/chargebacks` (reason code; optionally blocklists the customer). The payment becomes `ChargedBack`, the ledger debits the merchant for the amount plus a dispute fee (`Chargebacks:Fee`, default 15.00), and a `payment.charged_back` webhook is sent.
+- **Feedback loop**: `GET /api/fraud/performance` shows per rule how often it fires and how many approved payments were later charged back ("missed fraud"), plus approval and chargeback rates per rule version.
+- **ML hook**: `IRiskModel` (default `HeuristicRiskModel`, a small logistic stand-in). Enable with `modelEnabled`; a probability above `modelThreshold` adds `modelScore`. Swap in a trained model by registering another `IRiskModel`.
+
 ## Money: ledger, payouts, reconciliation
 
 **Double-entry ledger.** Every movement of money is a ledger transaction whose entries sum to zero (debit +, credit −), posted **in the same DB transaction** as the payment state change:

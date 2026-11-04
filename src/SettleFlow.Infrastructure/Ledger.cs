@@ -39,6 +39,7 @@ public static class LedgerTypes
     public const string PaymentSettled = "payment_settled";
     public const string Refund = "refund";
     public const string Payout = "payout";
+    public const string Chargeback = "chargeback";
 }
 
 public static class LedgerAccounts

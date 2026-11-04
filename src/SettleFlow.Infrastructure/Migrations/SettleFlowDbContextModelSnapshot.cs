@@ -180,6 +180,90 @@ namespace SettleFlow.Infrastructure.Migrations
                     b.ToTable("AuditLog", (string)null);
                 });
 
+            modelBuilder.Entity("SettleFlow.Infrastructure.BlocklistEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Type", "Value")
+                        .IsUnique();
+
+                    b.ToTable("Blocklist");
+                });
+
+            modelBuilder.Entity("SettleFlow.Infrastructure.Chargeback", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("Fee")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("MerchantId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("PaymentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ReasonCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("PaymentId")
+                        .IsUnique();
+
+                    b.ToTable("Chargebacks");
+                });
+
             modelBuilder.Entity("SettleFlow.Infrastructure.DeadLetter", b =>
                 {
                     b.Property<Guid>("Id")
@@ -225,6 +309,37 @@ namespace SettleFlow.Infrastructure.Migrations
                     b.HasIndex("CreatedAt");
 
                     b.ToTable("DeadLetters");
+                });
+
+            modelBuilder.Entity("SettleFlow.Infrastructure.FraudRuleSet", b =>
+                {
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Comment")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RulesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Version");
+
+                    b.HasIndex("Active")
+                        .IsUnique()
+                        .HasFilter("\"Active\"");
+
+                    b.ToTable("FraudRuleSets");
                 });
 
             modelBuilder.Entity("SettleFlow.Infrastructure.IdempotencyRecord", b =>
@@ -523,6 +638,10 @@ namespace SettleFlow.Infrastructure.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<decimal>("ChargebackAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<string>("Country")
                         .IsRequired()
                         .HasMaxLength(2)
@@ -566,8 +685,14 @@ namespace SettleFlow.Infrastructure.Migrations
                     b.Property<string>("ReviewedBy")
                         .HasColumnType("text");
 
+                    b.Property<double?>("RiskModelScore")
+                        .HasColumnType("double precision");
+
                     b.Property<string>("RiskReasonsJson")
                         .HasColumnType("text");
+
+                    b.Property<int?>("RiskRuleSetVersion")
+                        .HasColumnType("integer");
 
                     b.Property<int?>("RiskScore")
                         .HasColumnType("integer");

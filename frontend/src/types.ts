@@ -8,11 +8,12 @@ export type PaymentStatus =
   | 'Settled'
   | 'SettlementFailed'
   | 'PartiallyRefunded'
-  | 'Refunded';
+  | 'Refunded'
+  | 'ChargedBack';
 
 export const ALL_STATUSES: PaymentStatus[] = [
   'PendingFraud', 'FraudReview', 'Authorized', 'FraudApproved', 'Settled', 'PartiallyRefunded', 'Refunded',
-  'Declined', 'SettlementFailed', 'Voided',
+  'Declined', 'SettlementFailed', 'Voided', 'ChargedBack',
 ];
 
 export const STATUS_LABEL: Record<PaymentStatus, string> = {
@@ -26,6 +27,7 @@ export const STATUS_LABEL: Record<PaymentStatus, string> = {
   Voided: 'Voided',
   PartiallyRefunded: 'Partially refunded',
   Refunded: 'Refunded',
+  ChargedBack: 'Charged back',
 };
 
 export interface Payment {
@@ -51,6 +53,9 @@ export interface Payment {
   voidedAt: string | null;
   feeAmount: number | null;
   payoutId: string | null;
+  riskRuleSetVersion: number | null;
+  riskModelScore: number | null;
+  chargebackAmount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -248,3 +253,43 @@ export interface AuditEntry {
   traceId: string | null;
   occurredAt: string;
 }
+
+export interface FraudRules {
+  highAmountEnabled: boolean; highAmountThreshold: number; highAmountScore: number;
+  countryRiskEnabled: boolean; lowRiskCountries: string; countryRiskScore: number;
+  roundAmountEnabled: boolean; roundAmountMultiple: number; roundAmountScore: number;
+  velocityEnabled: boolean; velocityLimit: number; velocityWindow: string; velocityScore: number;
+  blocklistEnabled: boolean;
+  modelEnabled: boolean; modelThreshold: number; modelScore: number;
+  reviewThreshold: number; declineThreshold: number;
+}
+
+export interface FraudRulesView {
+  version: number;
+  rules: FraudRules;
+  history: { version: number; active: boolean; comment: string | null; createdBy: string; createdAt: string }[];
+}
+
+export interface Simulation {
+  payments: number;
+  current: Record<string, number>;
+  candidate: Record<string, number>;
+  changed: number;
+  transitions: Record<string, number>;
+  chargebacksTotal: number;
+  chargebacksCaughtCurrent: number;
+  chargebacksCaughtCandidate: number;
+  examples: { paymentId: string; amount: number; currency: string; country: string; from: string; to: string; score: number; reasons: string[] }[];
+}
+
+export interface FraudPerformance {
+  days: number;
+  payments: number;
+  approved: number;
+  chargebacks: number;
+  chargebackRateOnApproved: number;
+  byRule: { rule: string; fired: number; declined: number; inReview: number; approvedThenChargedBack: number }[];
+  byVersion: { version: number; payments: number; approvalRate: number; chargebacks: number }[];
+}
+
+export interface BlocklistEntry { id: string; type: string; value: string; reason: string; createdBy: string; createdAt: string; expiresAt: string | null }

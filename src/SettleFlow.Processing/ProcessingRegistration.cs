@@ -9,10 +9,21 @@ public static class ProcessingRegistration
 {
     public static IHostApplicationBuilder AddFraudProcessing(this IHostApplicationBuilder builder)
     {
-        builder.Services.Configure<FraudOptions>(builder.Configuration.GetSection("Fraud"));
-        builder.Services.AddSingleton<FraudScorer>();
+        builder.Services.AddFraudEngine(builder.Configuration);
         builder.Services.AddHostedService<FraudWorker>();
         return builder;
+    }
+
+    /// <summary>Rules provider (DB-backed, cached), risk model hook, simulator. Used by the fraud worker and the API.</summary>
+    public static IServiceCollection AddFraudEngine(this IServiceCollection services, Microsoft.Extensions.Configuration.IConfiguration config)
+    {
+        services.Configure<FraudOptions>(config.GetSection("Fraud"));
+        services.AddMemoryCache();
+        services.AddSingleton<FraudScorer>();
+        services.AddSingleton<FraudRulesProvider>();
+        services.AddSingleton<IRiskModel, HeuristicRiskModel>();
+        services.AddSingleton<FraudSimulator>();
+        return services;
     }
 
     /// <summary>Acquirer gateway (idempotent simulator wrapped in timeout + per-merchant circuit breaker).</summary>

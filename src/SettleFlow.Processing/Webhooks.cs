@@ -39,6 +39,7 @@ public static class WebhookEvents
         NotificationTypes.Voided => "payment.voided",
         NotificationTypes.Refunded => "refund.succeeded",
         NotificationTypes.RefundFailed => "refund.failed",
+        NotificationTypes.ChargedBack => "payment.charged_back",
         _ => null // e.g. REVIEW_REQUIRED is for the ops team only
     };
 }

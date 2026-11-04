@@ -37,6 +37,7 @@ public static class NotificationTypes
     public const string Voided = "VOIDED";
     public const string Refunded = "REFUNDED";
     public const string RefundFailed = "REFUND_FAILED";
+    public const string ChargedBack = "CHARGED_BACK";
 }
 
 public sealed record PaymentCreated(

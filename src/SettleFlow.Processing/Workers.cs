@@ -12,7 +12,7 @@ namespace SettleFlow.Processing;
 /// <summary>payments.created → risk score → payments.fraud.completed (+ payments.failed when declined).</summary>
 public sealed class FraudWorker(
     IOptions<KafkaOptions> options, IServiceScopeFactory scopes, ILogger<FraudWorker> logger,
-    FraudScorer scorer, IOptions<FraudOptions> fraudOptions)
+    FraudRulesProvider rulesProvider, IRiskModel model)
     : PaymentEventWorker<PaymentCreated>(options, scopes, logger, Topics.PaymentsCreated)
 {
     protected override async Task HandleAsync(EventEnvelope<PaymentCreated> e, SettleFlowDbContext db, CancellationToken ct)
@@ -26,11 +26,25 @@ public sealed class FraudWorker(
             return;
         }
 
-        var since = p.CreatedAt - fraudOptions.Value.VelocityWindow;
+        // Rules come from the database (versioned, editable at runtime), cached for a few seconds.
+        var (version, rules) = await rulesProvider.GetActiveAsync(db, ct);
+
+        var since = p.CreatedAt - rules.VelocityWindow;
         var recent = await db.Payments.CountAsync(x =>
             x.CustomerId == p.CustomerId && x.Id != p.Id && x.CreatedAt >= since && x.CreatedAt <= p.CreatedAt, ct);
 
-        var result = scorer.Score(new FraudInput(p.Amount, p.Country, recent));
+        var now0 = DateTimeOffset.UtcNow;
+        var blocked = await db.Blocklist.AsNoTracking()
+            .Where(b => (b.ExpiresAt == null || b.ExpiresAt > now0) &&
+                        ((b.Type == "customer" && b.Value == p.CustomerId) || (b.Type == "country" && b.Value == p.Country)))
+            .Select(b => b.Type).ToListAsync(ct);
+
+        double? probability = rules.ModelEnabled ? model.Predict(new RiskFeatures(p.Amount, p.Country, recent, p.CreatedAt)) : null;
+
+        var result = FraudScorer.Score(new FraudInput(p.Amount, p.Country, recent,
+            blocked.Contains("customer"), blocked.Contains("country"), probability), rules);
+        p.RiskRuleSetVersion = version;
+        p.RiskModelScore = probability;
         Activity.Current?.SetTag("payment.id", p.Id).SetTag("fraud.decision", result.Decision).SetTag("fraud.score", result.Score);
 
         var now = DateTimeOffset.UtcNow;
@@ -66,7 +80,8 @@ public sealed class FraudWorker(
             db.Enqueue(Topics.PaymentFailed, key, new PaymentFailed(p.Id, "fraud", string.Join(',', result.Reasons), now));
 
         var reasons = result.Reasons.Count > 0 ? string.Join(", ", result.Reasons) : "no risk signals";
-        db.RecordTimeline(p.Id, "FraudScored", "fraud-worker", $"{result.Decision} — score {result.Score} ({reasons})");
+        db.RecordTimeline(p.Id, "FraudScored", "fraud-worker",
+            $"{result.Decision} — score {result.Score} ({reasons}) · rules v{version}{(probability is null ? "" : $" · model {probability:0.00}")}");
         if (awaitingCapture) db.RecordTimeline(p.Id, "Authorized", "fraud-worker", "Funds held; waiting for capture");
 
         SettleFlowTelemetry.FraudDecisions.Add(1, new KeyValuePair<string, object?>("decision", result.Decision));
