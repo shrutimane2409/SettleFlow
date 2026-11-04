@@ -3,26 +3,54 @@ kind: Deployment
 metadata:
   name: api
   namespace: settleflow
+  labels: { app: api, app.kubernetes.io/part-of: settleflow }
 spec:
-  replicas: 1
+  replicas: 2   # safe to scale: outbox rows are claimed with SKIP LOCKED, consumers share a Kafka group
   selector: { matchLabels: { app: api } }
   template:
-    metadata: { labels: { app: api } }
+    metadata:
+      labels: { app: api, app.kubernetes.io/part-of: settleflow }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: /metrics
     spec:
+      securityContext: { runAsNonRoot: true }
       containers:
         - name: api
-          image: ghcr.io/YOUR_GITHUB_USER/settleflow-api:latest
+          image: ghcr.io/shrutii09/settleflow-apiatest
+          ports: [{ name: http, containerPort: 8080 }]
           env:
             - name: ConnectionStrings__Postgres
               valueFrom: { secretKeyRef: { name: settleflow-secrets, key: postgres } }
             - name: Kafka__BootstrapServers
               value: redpanda:9092
+            - name: Kafka__GroupId
+              value: settleflow-api
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://jaeger-collector:4317
           resources:
             requests: { cpu: 50m, memory: 128Mi }
             limits: { cpu: 500m, memory: 512Mi }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true }
+          startupProbe:
+            httpGet: { path: /health/live, port: http }
+            periodSeconds: 2
+            failureThreshold: 60
           readinessProbe:
-            tcpSocket: { port: 8080 }
-            initialDelaySeconds: 10
+            httpGet: { path: /health/ready, port: http }
+            periodSeconds: 10
           livenessProbe:
-            tcpSocket: { port: 8080 }
-            initialDelaySeconds: 30
+            httpGet: { path: /health/live, port: http }
+            periodSeconds: 15
+          volumeMounts: [{ name: tmp, mountPath: /tmp }]
+      volumes: [{ name: tmp, emptyDir: {} }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: settleflow
+spec:
+  selector: { app: api }
+  ports: [{ name: http, port: 80, targetPort: http }]

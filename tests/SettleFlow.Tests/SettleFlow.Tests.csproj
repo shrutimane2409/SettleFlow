@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -10,10 +10,9 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="FluentAssertions" />
-<PackageReference Include="Microsoft.NET.Test.Sdk" />
-<PackageReference Include="Testcontainers.PostgreSql" />
-<PackageReference Include="xunit" />
-<PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>
 
   <ItemGroup>
@@ -21,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\SettleFlow.Infrastructure\SettleFlow.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\SettleFlow.Processing\SettleFlow.Processing.csproj" />
     <ProjectReference Include="..\..\src\SettleFlow.Api\SettleFlow.Api.csproj" />
   </ItemGroup>
 

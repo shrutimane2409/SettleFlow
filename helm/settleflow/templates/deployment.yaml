@@ -1,23 +1,47 @@
+{{- range $name, $svc := .Values.services }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-api
+  name: {{ $.Release.Name }}-{{ $name }}
+  labels: { app: {{ $name }}, app.kubernetes.io/instance: {{ $.Release.Name }}, app.kubernetes.io/part-of: settleflow }
 spec:
-  replicas: {{ .Values.replicaCount }}
-  selector: { matchLabels: { app: settleflow-api } }
+  replicas: {{ $svc.replicas }}
+  selector: { matchLabels: { app: {{ $name }}, app.kubernetes.io/instance: {{ $.Release.Name }} } }
   template:
-    metadata: { labels: { app: settleflow-api } }
+    metadata:
+      labels: { app: {{ $name }}, app.kubernetes.io/instance: {{ $.Release.Name }} }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: /metrics
     spec:
+      securityContext: { runAsNonRoot: true }
       containers:
-        - name: api
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          ports: [{ containerPort: 8080 }]
+        - name: {{ $name }}
+          image: "{{ $.Values.image.registry }}/settleflow-{{ $name }}:{{ $.Values.image.tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          ports: [{ name: http, containerPort: 8080 }]
           env:
-            - name: ASPNETCORE_URLS
-              value: http://+:8080
             - name: ConnectionStrings__Postgres
-              valueFrom: { secretKeyRef: { name: settleflow-secrets, key: postgres } }
+              valueFrom: { secretKeyRef: { name: {{ $.Values.postgresSecret }}, key: postgres } }
             - name: Kafka__BootstrapServers
-              value: redpanda:9092
-          readinessProbe: { httpGet: { path: /health, port: 8080 }, initialDelaySeconds: 10 }
-          livenessProbe: { httpGet: { path: /health, port: 8080 }, initialDelaySeconds: 30 }
+              value: {{ $.Values.kafka.bootstrapServers | quote }}
+            - name: Kafka__GroupId
+              value: {{ $svc.groupId | quote }}
+            {{- with $.Values.otlpEndpoint }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ . | quote }}
+            {{- end }}
+            {{- range $k, $v := $svc.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          resources: {{- toYaml $.Values.resources | nindent 12 }}
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true }
+          startupProbe: { httpGet: { path: /health/live, port: http }, periodSeconds: 2, failureThreshold: 60 }
+          readinessProbe: { httpGet: { path: /health/ready, port: http }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /health/live, port: http }, periodSeconds: 15 }
+          volumeMounts: [{ name: tmp, mountPath: /tmp }]
+      volumes: [{ name: tmp, emptyDir: {} }]
+{{- end }}

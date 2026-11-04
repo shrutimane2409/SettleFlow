@@ -1,4 +1,8 @@
+using System.Diagnostics;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Design;
+using SettleFlow.Contracts;
 
 namespace SettleFlow.Infrastructure;
 
@@ -16,17 +20,32 @@ public sealed class Payment
     public int? RiskScore { get; set; }
     public string? RiskReasonsJson { get; set; }
     public string? SettlementReference { get; set; }
+    public string? FailureReason { get; set; }
+    public string? ReviewedBy { get; set; }
+    public string? ReviewNote { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+
+    /// <summary>Optimistic concurrency token, mapped to Postgres <c>xmin</c>.</summary>
+    public uint Version { get; set; }
+
+    public string[] RiskReasons =>
+        RiskReasonsJson is null ? [] : JsonSerializer.Deserialize<string[]>(RiskReasonsJson) ?? [];
 }
 
 public sealed class OutboxMessage
 {
     public Guid Id { get; set; }
+
+    /// <summary>Monotonic insert order; used to keep per-key publish ordering.</summary>
+    public long Sequence { get; set; }
+
     public string Topic { get; set; } = "";
     public string Key { get; set; } = "";
     public string Payload { get; set; } = "";
+    public string? TraceParent { get; set; }
     public DateTimeOffset OccurredAt { get; set; }
+    public DateTimeOffset NextAttemptAt { get; set; }
     public DateTimeOffset? PublishedAt { get; set; }
     public int Attempts { get; set; }
     public string? LastError { get; set; }
@@ -34,8 +53,53 @@ public sealed class OutboxMessage
 
 public sealed class InboxMessage
 {
+    /// <summary>Logical consumer name. Dedup is per consumer, so two services reading one topic don't block each other.</summary>
+    public string Consumer { get; set; } = "";
     public Guid EventId { get; set; }
     public DateTimeOffset ProcessedAt { get; set; }
+}
+
+public sealed class IdempotencyRecord
+{
+    public string Key { get; set; } = "";
+    public string RequestHash { get; set; } = "";
+    public Guid PaymentId { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>Audit trail of everything that happened to a payment, shown as a timeline in the dashboard.</summary>
+public sealed class PaymentEvent
+{
+    public long Id { get; set; }
+    public Guid PaymentId { get; set; }
+    public string Type { get; set; } = "";
+    public string Source { get; set; } = "";
+    public string? Detail { get; set; }
+    public DateTimeOffset OccurredAt { get; set; }
+}
+
+public sealed class Notification
+{
+    public long Id { get; set; }
+    public Guid PaymentId { get; set; }
+    public string Type { get; set; } = "";
+    public string Message { get; set; } = "";
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+public sealed class DeadLetter
+{
+    public Guid Id { get; set; }
+    public string Consumer { get; set; } = "";
+    public string Topic { get; set; } = "";
+    public int Partition { get; set; }
+    public long Offset { get; set; }
+    public string? Key { get; set; }
+    public string Payload { get; set; } = "";
+    public string Error { get; set; } = "";
+    public int Attempts { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? ReplayedAt { get; set; }
 }
 
 public sealed class SettleFlowDbContext(DbContextOptions<SettleFlowDbContext> options) : DbContext(options)
@@ -43,15 +107,105 @@ public sealed class SettleFlowDbContext(DbContextOptions<SettleFlowDbContext> op
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
     public DbSet<InboxMessage> Inbox => Set<InboxMessage>();
+    public DbSet<IdempotencyRecord> IdempotencyKeys => Set<IdempotencyRecord>();
+    public DbSet<PaymentEvent> PaymentEvents => Set<PaymentEvent>();
+    public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<DeadLetter> DeadLetters => Set<DeadLetter>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
-        b.Entity<Payment>().HasKey(x => x.Id);
-        b.Entity<Payment>().Property(x => x.Amount).HasPrecision(18, 2);
-        b.Entity<Payment>().HasIndex(x => x.Status);
-        b.Entity<Payment>().HasIndex(x => x.CustomerId);
-        b.Entity<OutboxMessage>().HasKey(x => x.Id);
-        b.Entity<OutboxMessage>().HasIndex(x => new { x.PublishedAt, x.OccurredAt });
-        b.Entity<InboxMessage>().HasKey(x => x.EventId);
+        b.Entity<Payment>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Amount).HasPrecision(18, 2);
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
+            e.Property(x => x.Currency).HasMaxLength(3);
+            e.Property(x => x.Country).HasMaxLength(2);
+            e.Property(x => x.CustomerId).HasMaxLength(64);
+            e.Property(x => x.MerchantId).HasMaxLength(64);
+            e.Property(x => x.Version).IsRowVersion();
+            e.Ignore(x => x.RiskReasons);
+            e.HasIndex(x => new { x.Status, x.CreatedAt });
+            e.HasIndex(x => new { x.CustomerId, x.CreatedAt });
+            e.HasIndex(x => x.CreatedAt);
+        });
+
+        b.Entity<OutboxMessage>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Sequence).UseIdentityAlwaysColumn();
+            e.HasIndex(x => x.Sequence).IsUnique();
+            e.HasIndex(x => new { x.NextAttemptAt, x.Sequence }).HasFilter("\"PublishedAt\" IS NULL");
+            e.HasIndex(x => new { x.Topic, x.Key, x.Sequence }).HasFilter("\"PublishedAt\" IS NULL");
+            e.HasIndex(x => x.PublishedAt);
+        });
+
+        b.Entity<InboxMessage>().HasKey(x => new { x.Consumer, x.EventId });
+
+        b.Entity<IdempotencyRecord>(e =>
+        {
+            e.HasKey(x => x.Key);
+            e.Property(x => x.Key).HasMaxLength(128);
+        });
+
+        b.Entity<PaymentEvent>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.PaymentId, x.Id });
+        });
+
+        b.Entity<Notification>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.CreatedAt);
+        });
+
+        b.Entity<DeadLetter>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.CreatedAt);
+        });
     }
+}
+
+public static class SettleFlowDbContextExtensions
+{
+    /// <summary>
+    /// Queues an event in the transactional outbox. It is published to Kafka after the current
+    /// transaction commits, carrying the current trace context so the next hop joins the same trace.
+    /// </summary>
+    public static EventEnvelope<T> Enqueue<T>(this SettleFlowDbContext db, string topic, string key, T data, string? eventId = null)
+    {
+        var envelope = EventEnvelope<T>.Create(data, eventId);
+        db.Outbox.Add(new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            Topic = topic,
+            Key = key,
+            Payload = JsonSerializer.Serialize(envelope),
+            TraceParent = Activity.Current?.Id,
+            OccurredAt = envelope.OccurredAt,
+            NextAttemptAt = envelope.OccurredAt
+        });
+        return envelope;
+    }
+
+    public static void RecordTimeline(this SettleFlowDbContext db, Guid paymentId, string type, string source, string? detail = null) =>
+        db.PaymentEvents.Add(new PaymentEvent
+        {
+            PaymentId = paymentId,
+            Type = type,
+            Source = source,
+            Detail = detail,
+            OccurredAt = DateTimeOffset.UtcNow
+        });
+}
+
+/// <summary>Used by <c>dotnet ef migrations</c> only.</summary>
+public sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<SettleFlowDbContext>
+{
+    public SettleFlowDbContext CreateDbContext(string[] args) =>
+        new(new DbContextOptionsBuilder<SettleFlowDbContext>()
+            .UseNpgsql("Host=localhost;Database=settleflow;Username=settleflow;Password=settleflow")
+            .Options);
 }

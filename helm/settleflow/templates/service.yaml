@@ -1,6 +1,12 @@
+{{- range $name, $svc := .Values.services }}
+{{- if $svc.expose }}
+---
 apiVersion: v1
 kind: Service
-metadata: { name: settleflow-api }
+metadata:
+  name: {{ $.Release.Name }}-{{ $name }}
 spec:
-  selector: { app: settleflow-api }
-  ports: [{ port: 8080, targetPort: 8080 }]
+  selector: { app: {{ $name }}, app.kubernetes.io/instance: {{ $.Release.Name }} }
+  ports: [{ name: http, port: 80, targetPort: http }]
+{{- end }}
+{{- end }}

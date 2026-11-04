@@ -1,3 +1,22 @@
+# SettleFlow local stack.
+#   Dashboard   http://localhost:3000
+#   API/Swagger http://localhost:8083/swagger
+#   Kafka UI    http://localhost:8082
+#   Jaeger      http://localhost:16686
+#   Prometheus  http://localhost:9090
+#   Grafana     http://localhost:3001  (anonymous viewer; admin/admin)
+
+x-dotnet-env: &dotnet-env
+  ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=settleflow;Username=settleflow;Password=settleflow
+  Kafka__BootstrapServers: redpanda:9092
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+
+x-dotnet-service: &dotnet-service
+  restart: unless-stopped
+  depends_on:
+    postgres: { condition: service_healthy }
+    redpanda: { condition: service_healthy }
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -34,51 +53,53 @@ services:
       - PLAINTEXT://redpanda:9092,OUTSIDE://localhost:19092
     ports: ["19092:19092"]
     volumes: ["redpanda_data:/var/lib/redpanda/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   console:
     image: redpandadata/console:v3.2.2
     depends_on: [redpanda]
     environment:
       KAFKA_BROKERS: redpanda:9092
-    ports: ["8081:8080"]
+    ports: ["8082:8080"]
+
+  jaeger:
+    image: jaegertracing/jaeger:2.10.0
+    ports: ["16686:16686"]
 
   api:
-    build:
-      context: .
-      dockerfile: src/SettleFlow.Api/Dockerfile
-    depends_on:
-      postgres: { condition: service_healthy }
-      redpanda: { condition: service_started }
-    ports: ["8080:8080"]
+    <<: *dotnet-service
+    build: { context: ., dockerfile: src/SettleFlow.Api/Dockerfile }
+    ports: ["8083:8080"]
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=settleflow;Username=settleflow;Password=settleflow
-      Kafka__BootstrapServers: redpanda:9092
+      <<: *dotnet-env
+      ASPNETCORE_ENVIRONMENT: Production
       Kafka__GroupId: settleflow-api
 
   fraud-worker:
+    <<: *dotnet-service
     build: { context: ., dockerfile: src/SettleFlow.FraudWorker/Dockerfile }
-    depends_on: [postgres, redpanda]
     environment:
-      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=settleflow;Username=settleflow;Password=settleflow
-      Kafka__BootstrapServers: redpanda:9092
-      Kafka__GroupId: settleflow-fraud-v1
+      <<: *dotnet-env
+      Kafka__GroupId: settleflow-fraud
 
   settlement-worker:
+    <<: *dotnet-service
     build: { context: ., dockerfile: src/SettleFlow.SettlementWorker/Dockerfile }
-    depends_on: [postgres, redpanda]
     environment:
-      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=settleflow;Username=settleflow;Password=settleflow
-      Kafka__BootstrapServers: redpanda:9092
-      Kafka__GroupId: settleflow-settlement-v1
+      <<: *dotnet-env
+      Kafka__GroupId: settleflow-settlement
+      Settlement__TransientFailureRate: "0.1"
 
   notification-worker:
+    <<: *dotnet-service
     build: { context: ., dockerfile: src/SettleFlow.NotificationWorker/Dockerfile }
-    depends_on: [postgres, redpanda]
     environment:
-      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=settleflow;Username=settleflow;Password=settleflow
-      Kafka__BootstrapServers: redpanda:9092
-      Kafka__GroupId: settleflow-notification-v1
+      <<: *dotnet-env
+      Kafka__GroupId: settleflow-notification
 
   frontend:
     build: ./frontend
@@ -94,6 +115,11 @@ services:
   grafana:
     image: grafana/grafana:12.1.1
     ports: ["3001:3000"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/settleflow.json
     volumes:
       - "./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro"
       - grafana_data:/var/lib/grafana
