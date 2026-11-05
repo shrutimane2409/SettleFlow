@@ -1794,12 +1794,7 @@
         ],
         "type": "object",
         "properties": {
-          "data": {
-            "enum": [
-              null
-            ],
-            "nullable": true
-          },
+          "data": {},
           "eventType": {
             "type": "string"
           },
