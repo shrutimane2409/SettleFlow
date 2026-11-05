@@ -12,6 +12,8 @@ ENV VITE_HIDE_DEMO_LOGINS=$VITE_HIDE_DEMO_LOGINS
 RUN npm run build
 
 FROM nginx:alpine
+# Pick up Alpine security fixes that are released before a new nginx:alpine image is published.
+RUN apk upgrade --no-cache
 # The official image renders /etc/nginx/templates/*.template with envsubst at startup.
 ENV NGINX_RESOLVER=127.0.0.11 \
     API_UPSTREAM=http://api:8080
