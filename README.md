@@ -1,8 +1,30 @@
 # SettleFlow
 
-An event-driven payment processing and fraud-screening platform built with ASP.NET Core (.NET 10), PostgreSQL, Kafka-compatible Redpanda, OpenTelemetry and React.
+> Production-oriented event-driven payment processing and fraud-screening platform built with .NET 10, PostgreSQL, Kafka-compatible Redpanda, Docker, Kubernetes, OpenTelemetry, Prometheus, Grafana and React.
 
-A payment goes through risk scoring, optional manual review, settlement with a (simulated) acquirer, and customer notification. Each step is an independent service connected only by Kafka events, with exactly-once *business effects* on top of at-least-once delivery.
+---
+
+## Overview
+
+SettleFlow is a distributed payment-processing system designed around asynchronous event-driven workflows.
+
+A payment enters through the ASP.NET Core API, is persisted to PostgreSQL, and is published through a transactional outbox to Redpanda/Kafka. Independent workers then process fraud screening, settlement and notification workflows. Each step is an independent service connected only by Kafka events, with exactly-once *business effects* on top of at-least-once delivery.
+
+The project focuses on backend engineering concerns such as:
+
+- reliable event publication
+- idempotent payment creation
+- asynchronous processing
+- fraud decisioning
+- payment state transitions
+- retries and dead-letter handling
+- double-entry ledger, payouts and reconciliation
+- security (roles, merchant API keys, audit log)
+- observability and SLO alerting
+- containerized and Kubernetes deployment
+- automated testing (unit, end-to-end, chaos, browser, load)
+
+---
 
 ## Architecture
 
@@ -307,7 +329,7 @@ The integration suite runs the API and every worker in-process against real cont
 | Key | Default | Meaning |
 |---|---|---|
 | `Kafka:MaxHandlerAttempts` | 5 | Attempts before dead-lettering (non-transient errors) |
-| `Kafka:TopicPartitions` | 3 | Partitions for auto-created topics |
+| `Kafka:TopicPartitions` | 12 | Partitions for auto-created topics |
 | `Outbox:PollInterval` | 200 ms | Outbox poll interval when idle |
 | `Outbox:Retention` | 7 days | Published outbox rows are purged after this |
 | `Fraud:*` | see `FraudOptions` | Thresholds, scores, low-risk countries, velocity window |
