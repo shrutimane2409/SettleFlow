@@ -10,7 +10,7 @@ RUN dotnet restore src/SettleFlow.NotificationWorker/SettleFlow.NotificationWork
 COPY src/ src/
 RUN dotnet publish src/SettleFlow.NotificationWorker/SettleFlow.NotificationWorker.csproj -c Release -o /app/publish --no-restore /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:11.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 USER $APP_UID
